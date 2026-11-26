@@ -1488,12 +1488,16 @@ function placeCar(c,snap){ const [x,z]=laneXZ(c), g=c.g; const ty=c.r.axis==='x'
   if(snap){ g.position.set(x,0,z); c.yaw=ty; } c.ty=ty; }
 function honk(){ if(!AU.ctx) return; blip(330,0.16,'square',0.05); blip(415,0.16,'square',0.04); }
 function updateTraffic(dt){
-  for(const c of TRAFFIC){ const r=c.r, ax=r.axis==='x', g=c.g; c.cool-=dt; c.honk-=dt;
-    if(c.wait>0){ c.wait-=dt; c.v=0; }
+  const S=(MP.live&&!policeHost()&&POLSNAP&&POLSNAP.tr&&POLSNAP.tr.length===TRAFFIC.length)?POLSNAP.tr:null;   /* a guest: the host's traffic, smoothed */
+  const crew=(MP.live&&typeof crewTargets==='function')?crewTargets().map(t=>t.pos):[P.pos];
+  for(let ti=0;ti<TRAFFIC.length;ti++){ const c=TRAFFIC[ti], r=c.r, ax=r.axis==='x', g=c.g; c.cool-=dt; c.honk-=dt;
+    if(S){ const e=S[ti], r2=ROADS[e[0]]; if(!r2) continue;
+      if(c.r!==r2||c.d!==e[2]){ c.r=r2; c.d=e[2]; c.cool=0.6; c.u=e[1]; }                       // turned or reversed on the host
+      c.v=e[3]; c.wait=e[4]?0.2:0; c.u+=c.d*c.v*dt; c.u=lerp(c.u,e[1],Math.min(1,dt*4)); placeCar(c,false); }
+    else if(c.wait>0){ c.wait-=dt; c.v=0; }
     else { // brake for the skater or a car ahead in this lane
-      const [lx,lz]=laneXZ(c); const ahead=ax?(P.pos.x-c.u)*c.d:(P.pos.z-c.u)*c.d, lat=ax?Math.abs(P.pos.z-lz):Math.abs(P.pos.x-lx);
-      let stop=ahead>0&&ahead<9&&lat<1.7&&P.pos.y<2.2;
-      if(stop&&c.honk<=0&&ahead<6){ honk(); c.honk=2.5; }
+      const [lx,lz]=laneXZ(c); let stop=false;
+      for(const q of crew){ const ahead=ax?(q.x-c.u)*c.d:(q.z-c.u)*c.d, lat=ax?Math.abs(q.z-lz):Math.abs(q.x-lx); if(ahead>0&&ahead<9&&lat<1.7&&q.y<2.2){ stop=true; if(q===P.pos&&c.honk<=0&&ahead<6){ honk(); c.honk=2.5; } } }   // brakes for any skater in the crew
       for(const o of TRAFFIC){ if(o!==c&&o.r===r&&o.d===c.d){ const gap=(o.u-c.u)*c.d; if(gap>0&&gap<7.5) stop=true; } }
       c.v+=clamp((stop?0:c.vmax)-c.v,-16*dt,4*dt);
       const nu=c.u+c.d*c.v*dt;
@@ -2708,7 +2712,8 @@ function policeSnapshot(){ const B=BOSS.boss&&BOSS.active?BOSS.boss:null;
   return {t:'pol',heat,spot:spotT>0?1:0,ev:+evadeT.toFixed(1),gr:+(P.heatGrace||0).toFixed(1),bb:bossesBeaten,
     boss:B?{hp:B.hp,max:B.maxHp,ar:B.armor,dz:B.daze>0?1:0,min:BOSS.minions,wv:BOSS.wave,wn:BOSS.waves,id:BOSS.id}:null,
     c:COPS.map(c=>[c.nid??=nidSeq++,+c.pos.x.toFixed(2),+c.y.toFixed(2),+c.pos.z.toFixed(2),+c.yaw.toFixed(2),c.daze>0?1:0,c.kind==='boss'?2:c.kind==='minion'?1:0,c.see?1:0,c.flash.visible?1:0,c.corp?1:0]),
-    dr:PDRONES.map(d=>[d.nid??=nidSeq++,+d.pos.x.toFixed(1),+d.pos.y.toFixed(1),+d.pos.z.toFixed(1),d.daze>0?1:0])}; }
+    dr:PDRONES.map(d=>[d.nid??=nidSeq++,+d.pos.x.toFixed(1),+d.pos.y.toFixed(1),+d.pos.z.toFixed(1),d.daze>0?1:0]),
+    tr:TRAFFIC.map(c=>[ROADS.indexOf(c.r),+c.u.toFixed(2),c.d,+c.v.toFixed(2),c.wait>0?1:0])}; }   // the host drives the city's traffic for the whole crew
 function mirrorPolice(dt){ const S=POLSNAP; if(!S) return; heat=S.heat; spotT=S.spot?1:-1; evadeT=S.ev; P.heatGrace=S.gr;
   for(const k of S.bb||[]) if(!bossesBeaten.includes(k)){ bossesBeaten.push(k); if(k==='final'){ BOSS.active=false; $('bossbar').classList.add('hidden'); message(`THE STREETS ARE FREE<br><span style="font-size:22px">THE CREW TOOK DOWN DIRECTOR MERCER</span>`,4); saveRun(); } if(k===DKEY){ BOSS.active=false; $('bossbar').classList.add('hidden'); message(`DISTRICT LIBERATED!<br><span style="font-size:22px">THE CREW TOOK DOWN ${BOSSES[DKEY]}</span>`,3); saveRun(); } }
   if(S.boss){ $('bossbar').classList.remove('hidden'); $('bossname').textContent=BOSSES[S.boss.id||DKEY]||'THE CHIEF'; $('bossfill').style.width=Math.max(0,S.boss.hp/S.boss.max*100)+'%'; $('bossarmor').style.width=(S.boss.dz?0:S.boss.ar/3*100)+'%';
@@ -2719,6 +2724,8 @@ function mirrorPolice(dt){ const S=POLSNAP; if(!S) return; heat=S.heat; spotT=S.
     if(e[6]===2){ BOSS.boss=c; if(S.boss){ c.hp=S.boss.hp; c.maxHp=S.boss.max; c.armor=S.boss.ar; } }   /* keep the boss's real health so a guest can take over the fight if the host leaves */
     const k=Math.min(1,dt*10), ox=c.pos.x, oz=c.pos.z; c.pos.x=lerp(c.pos.x,e[1],k); c.pos.z=lerp(c.pos.z,e[3],k); c.y=lerp(c.y,e[2],k); c.yaw+=angDiff(c.yaw,e[4])*k; c.daze=e[5]?1:0; c.see=!!e[7];
     c.g.position.set(c.pos.x,c.y,c.pos.z); c.g.rotation.y=c.yaw; c.stars.visible=!!e[5]; if(e[5]) c.stars.rotation.y+=dt*5; c.flash.visible=!!e[8];
+    if(c.kind&&e[5]&&state==='play'&&!P.grounded&&!P.grind&&P.vel.y<0&&!(c.stompCd>clock)){ const sc=c.kind==='boss'?1.5:1, dd=Math.hypot(P.pos.x-c.pos.x,P.pos.z-c.pos.z);   /* guests stomp stunned enemies too: bounce now, the host applies the damage */
+      if(dd<1.6*sc&&P.pos.y>c.y+1.2&&P.pos.y<c.y+3.6*sc){ c.stompCd=clock+0.6; P.vel.y=CFG.JUMP*0.95; sfx.stomp&&sfx.stomp(); popup('STOMP!','big'); rumble(0.4,0.7,140); mpSend({t:'stomp',nid:c.nid}); } }
     const mv=Math.hypot(c.pos.x-ox,c.pos.z-oz)/Math.max(dt,1e-3); c.walk+=mv*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,mv/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armR.rotation.x=c.see?-1.45:sw*0.8; }
   const wd=new Map(S.dr.map(e=>[e[0],e]));
   for(let i=PDRONES.length-1;i>=0;i--){ const d=PDRONES[i]; if(!wd.has(d.nid)){ scene.remove(d.g); PDRONES.splice(i,1); } }
@@ -2783,7 +2790,7 @@ function updatePolice(dt){
     if(!c.tg||!TG.includes(c.tg)) c.tg=TG.reduce((a,b)=>b.pos.distanceTo(c.pos)<a.pos.distanceTo(c.pos)?b:a);
     const T=c.tg, TP=T.pos, dx=TP.x-c.pos.x, dz=TP.z-c.pos.z, dist=Math.hypot(dx,dz)||0.01;
     if(c.leave){ c.daze=0; c.stars.visible=false; if(dist>70||(c.gone=(c.gone||0)+dt)>6){ scene.remove(g); COPS.splice(i,1); continue; } }
-    if(c.kind&&c.daze>0&&!P.grounded&&!P.grind&&P.vel.y<0&&dist<1.6*(c.kind==='boss'?1.5:1)&&P.pos.y>c.y+1.2){ P.vel.y=CFG.JUMP*0.95; bossDamage(c,2,'STOMP!'); sfx.stomp(); continue; }   // stomp a stunned enemy
+    if(c.kind&&c.daze>0&&!P.grounded&&!P.grind&&P.vel.y<0&&Math.hypot(P.pos.x-c.pos.x,P.pos.z-c.pos.z)<1.6*(c.kind==='boss'?1.5:1)&&P.pos.y>c.y+1.2){ P.vel.y=CFG.JUMP*0.95; bossDamage(c,2,'STOMP!'); sfx.stomp(); continue; }   // stomp a stunned enemy
     if(c.daze>0&&c.climb){ c.climb=null; c.cp=null; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; g.position.y=c.y; }   /* paint knocks a climber off the wall */
     if(c.daze>0){ c.daze-=dt; c.see=false; c.stars.visible=true; c.stars.rotation.y+=dt*5; g.rotation.y+=dt*2.5; c.armL.rotation.x=c.armR.rotation.x=-2.6+Math.sin(clock*8)*0.3; c.legL.rotation.x=c.legR.rotation.x=0; if(c.daze<=0){ c.stars.visible=false; c.wander=null; } continue; }
     c.stars.visible=false; if(!c.leave) nearest=Math.min(nearest,dist);
@@ -4033,6 +4040,7 @@ function mpHandle(m){
   else if(m.t==='pol'){ const p=MP.peers.get(m.id); if(p&&p.st&&p.st.d===DKEY) POLSNAP=m; }
   else if(m.t==='hit'){ if(m.to===MP.id&&state==='play'){ const can=P.invuln<=0&&P.knock<=0; hurt(m.n,m.why); if(can&&m.push){ if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(...m.push); } } }
   else if(m.t==='spray'){ if(policeHost()&&state==='play') sprayAt(new V3(...m.o),new V3(Math.sin(m.f),0,Math.cos(m.f)),false); }
+  else if(m.t==='stomp'){ if(policeHost()&&state==='play'){ const c=COPS.find(c=>c.nid===m.nid); if(c&&c.kind&&c.daze>0&&!(c.stompCd>clock)){ c.stompCd=clock+0.5; bossDamage(c,2,'CREW STOMP!'); } } }   // a crewmate's stomp lands on the host's copy
   else if(m.t==='tgm'||m.t==='tgt'||m.t==='tge') tagModeMsg(m);
 }
 function shareMyTags(){ tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0); mpSend({t:'tags',all:tagsByDistrict}); }
