@@ -1777,7 +1777,11 @@ function buildHealth(){ const spots=[], ok=(x,z,y)=>Math.abs(ground(x,z,y+2).h-y
   const tops=FLOOR.islands.map(i=>i.rect).concat(FLOOR.deckRects||[]).sort((a,b)=>((a[0]*11+a[2]*5)&31)-((b[0]*11+b[2]*5)&31));
   let k=0; for(const r of tops){ if(k>=7) break; for(const [fx,fz] of [[0.25,0.75],[0.75,0.25],[0.5,0.5],[0.3,0.3]]){ const x=r[0]+(r[1]-r[0])*fx, z=r[2]+(r[3]-r[2])*fz; if(ok(x,z,SKYY)){ spots.push([x,SKYY,z]); k++; break; } } }
   if(FLOOR.summit) spots.push([FLOOR.summit.x+3,FLOOR.summit.y,FLOOR.summit.z-3]);
-  for(const [x,y,z] of spots) addHealth(x,y,z); FLOOR.health={mid:m,sky:k}; }
+  /* street level: spread out round the city, out of the traffic lanes */
+  let g=0; const onRoad=(x,z)=>ROADS.some(R=>R.axis==='x'?Math.abs(z-R.c)<RW+0.5&&x>R.a0&&x<R.a1:Math.abs(x-R.c)<RW+0.5&&z>R.a0&&z<R.a1);
+  for(let k=0;k<400&&g<8;k++){ const a=k*2.399, rr=18+(k%23)*5.6, x=Math.cos(a)*rr, z=Math.sin(a)*rr; if(Math.abs(x)>EDGE-8||Math.abs(z)>EDGE-8||(D.openSouth&&z>86)) continue;
+    if(onRoad(x,z)||!ok(x,z,0)||Math.hypot(x-D.spawn[0],z-D.spawn[2])<12||spots.some(q=>q[1]===0&&Math.hypot(q[0]-x,q[2]-z)<40)) continue; spots.push([x,0,z]); g++; }
+  for(const [x,y,z] of spots) addHealth(x,y,z); FLOOR.health={street:g,mid:m,sky:k}; }
 function healthTick(dt){ for(const h of HEALTH){ if(h.t>0){ h.t-=dt; if(h.t<=0) h.g.visible=true; continue; }
     h.g.rotation.y+=dt*1.8; h.g.position.y=h.base+Math.sin(clock*2.4+h.x)*0.15;
     if(state==='play'&&P.hp<100&&Math.abs(P.pos.x-h.x)<1.6&&Math.abs(P.pos.z-h.z)<1.6&&Math.abs(P.pos.y-h.y)<2.2){ P.hp=Math.min(100,P.hp+40); h.t=30; h.g.visible=false; popup('+40 HEALTH'); blip(880,0.08,'triangle',0.1); blip(1320,0.1,'triangle',0.08); emit(new V3(h.x,h.y+1,h.z),new V3(0,3,0),0x37d67a,0.6,0.2,-1); } } }
@@ -2523,7 +2527,7 @@ function bossReset(){ if(!BOSS.active) return; BOSS.active=false; $('bossbar').c
 function updateBossHUD(){ const b=BOSS.boss; if(!b) return; $('bossfill').style.width=Math.max(0,b.hp/b.maxHp*100)+'%'; $('bossarmor').style.width=(b.daze>0?0:b.armor/3*100)+'%';
   const t=(b.daze>0?'STUNNED · HIT IT NOW!':`ARMOR ${b.armor}/3 · PAINT IT TO CRACK IT`)+` · MINIONS ${BOSS.minions}`; if($('bossinfo').textContent!==t) $('bossinfo').textContent=t; }
 function updatePolice(dt){
-  P.sprayCd=Math.max(0,(P.sprayCd||0)-dt); P.hurtT=(P.hurtT||0)+dt; if(P.hurtT>6&&P.hp<100&&P.pos.y<8) P.hp=Math.min(100,P.hp+6*dt);   /* only the street heals you; up on the Mid and Sky floors you hunt for health packs */
+  P.sprayCd=Math.max(0,(P.sprayCd||0)-dt); P.hurtT=(P.hurtT||0)+dt;   /* no regen anywhere: health only comes back from the green + packs */
   healthTick(dt);
   if(!policeHost()){ mirrorPolice(dt); return; }                       // a crewmate runs the cops; we just show them
   if(TAGM.active) heat=0;                                              // tag mode: the cops stand down for the crew
@@ -3900,7 +3904,7 @@ const TIPS={ start:'Skate to the pink arrows and TAG them · the pointer shows t
   grind:'JUMP onto a rail to GRIND · SPACE again to hop off', wall:'JUMP while skating alongside a wall to WALL RIDE',
   boost:'Hold SHIFT / RT to BOOST · grinding fills it · boost through a long grind for 2X BOOST', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
   flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'COPS! Spray them (E / RB) to daze them · stomp drones · break line of sight to lose stars', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
-TIPS.health='Up on the Mid and Sky floors your health won\'t come back on its own · find the green + HEALTH packs';
+TIPS.health='Health doesn\'t come back on its own · find the green + HEALTH packs around the city';
 let tipSeen={}; try{ tipSeen=JSON.parse(localStorage.getItem('inkline_tips')||'{}')||{}; }catch(e){}
 let tipT=0, tipQ=[], tipCheck=0;
 let hintsOn=true; try{ hintsOn=localStorage.getItem('inkline_hints')!=='0'; }catch(e){}
@@ -3919,7 +3923,7 @@ function updateTips(dt){
     if(P.sprayTarget) tip('tag');
     if(clock>4&&!P.grind){ for(const r of rails){ if(railClosest(r,P.pos).d2<36){ tip('grind'); break; } } }
     if(P.grounded&&hs>8){ for(const w of WALLS){ const dx=P.pos.x-clamp(P.pos.x,w.x0,w.x1), dz=P.pos.z-clamp(P.pos.z,w.z0,w.z1); if(dx*dx+dz*dz<4&&w.top>4){ tip('wall'); break; } } }
-    if(clock>20) tip('boost'); if(P.gs&&P.gs.type==='ramp'&&!P.gs.qp) tip('kicker'); if(clock>45||FLOW.state>0) tip('flow'); if(heat>0) tip('drone'); if(P.hp<100&&P.pos.y>=8) tip('health'); if(clock>6&&(!P.grounded||P.grind)) tip('flip'); }
+    if(clock>20) tip('boost'); if(P.gs&&P.gs.type==='ramp'&&!P.gs.qp) tip('kicker'); if(clock>45||FLOW.state>0) tip('flow'); if(heat>0) tip('drone'); if(P.hp<100) tip('health'); if(clock>6&&(!P.grounded||P.grind)) tip('flip'); }
   if(tipT>0){ tipT-=dt; if(tipT<=0) $('tip').classList.add('hidden'); }
   else if(tipQ.length){ $('tip').textContent=tipQ.shift(); $('tip').classList.remove('hidden'); tipT=4.5; }
 }
