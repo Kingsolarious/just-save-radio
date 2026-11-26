@@ -199,7 +199,7 @@
     <span><b>WASD</b></span><span>Skate · <b>F</b> drift · <b>Q</b> / <b>S</b> powerslide</span>
     <span><b>MOUSE / ARROWS</b></span><span>Camera</span>
     <span><b>SPACE</b></span><span>Jump (hold = higher) · tap again in the air to flip (on rails too) · tap right before landing: Perfect Landing</span>
-    <span><b>SHIFT</b></span><span>Boost. Grinding fills it; it drains when your combo ends. Grind long for a 2x GRIND RUSH</span>
+    <span><b>SHIFT</b></span><span>Boost. Grinding fills it; it drains when your combo ends. Boost through a long grind for 2X BOOST: twice the acceleration while you hold it</span>
     <span><b>J · K · L</b></span><span>Air tricks: J spin · K grab · L kick · SPACE flip. Press two together for combo tricks (14 in all)</span>
     <span><b>WALLS & RAILS</b></span><span>Jump alongside a wall to wall-ride; land near rails to grind; steer at junctions to branch</span>
     <span><b>E / RMB</b></span><span>Hold near a marker, then flick the arrows shown (mouse, arrow keys)</span>
@@ -675,18 +675,28 @@ function upRamp(x0,x1,z0,z1,y0,h,dir,col,{floating=false,mat,every=8}={}){
 // grindable guard rail along a deck edge, raised on short posts
 function guard(a,b,y,color=0xffe23a,lift=0.9){ return addRail([[a[0],y+lift,a[1]],[b[0],y+lift,b[1]]],{color,posts:true,postEvery:1,radius:0.07}); }
 // updraft vent: roll over it to pop up to height toH
-function launchPad(x,z,y,toH,r=1.7,col=0x7ff3ff,target=null,apex=1.6){   // apex: how far above the landing height the arc peaks
-  const vy=Math.sqrt(2*CFG.G*(toH-y+apex)), T=(vy+Math.sqrt(vy*vy-2*CFG.G*(toH-y)))/CFG.G;   // flight time to land on toH
-  const pd={x,z,y,r,vy,kick:0,tx:target?.[0],tz:target?.[1],T}; PADS.push(pd);
-  const rim=new THREE.Mesh(new THREE.CylinderGeometry(r+0.25,r+0.35,0.16,24),LV.padRim); rim.position.set(x,y+0.08,z); outline(rim,0.04); world.add(rim);
-  const tex=canvasTex(128,128,g=>{ g.fillStyle='#16303a'; g.fillRect(0,0,128,128); g.strokeStyle='#'+new THREE.Color(col).getHexString(); g.lineWidth=9;
-    for(const k of [0,1]){ g.beginPath(); g.moveTo(34,92-k*34); g.lineTo(64,62-k*34); g.lineTo(94,92-k*34); g.stroke(); } });
-  const top=new THREE.Mesh(new THREE.CircleGeometry(r,24),new THREE.MeshBasicMaterial({map:tex})); top.rotation.x=-Math.PI/2; top.position.set(x,y+0.17,z); top.userData.dyn=true; world.add(top);
-  const glow=new THREE.Mesh(new THREE.CylinderGeometry(r*0.9,r,3.2,20,1,true),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.22,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));
-  glow.position.set(x,y+1.7,z); glow.userData.dyn=true; world.add(glow);
-  (scene.userData.spinners??=[]).push((dt,t)=>{ pd.kick=Math.max(0,pd.kick-dt*2); top.rotation.z+=dt*1.5; glow.material.opacity=0.16+0.08*Math.sin(t*5)+pd.kick*0.4; glow.scale.y=1+pd.kick*1.5; glow.position.y=y+1.7*(1+pd.kick*1.5); });
-  return pd;
-}
+// GRIND LIFTS: the only way up is to grind. Every climb is a rail that runs from the surface you're on up to the
+// edge of where you're going (grinding never drops below 6 m/s, so any climb makes it). Routed automatically:
+// it tries approach angles and steeper pitches until the line is clear of buildings and starts on solid footing.
+const LIFTS=[];
+function riderClear(x,z,y,R=0.7){ for(const s of solids){ if(x<=s.x0-R||x>=s.x1+R||z<=s.z0-R||z>=s.z1+R) continue; const top=topAt(s,x,z); if(top>y-0.15&&(s.bot===undefined||s.bot<y+1.75)) return false; } return true; }
+function launchPad(x,z,y,toH,r,col=0x7ff3ff,target=null){ const tx=target?target[0]:x, tz=target?target[1]:z, rise=toH-y;
+  let bx=x-tx, bz=z-tz; if(Math.hypot(bx,bz)<0.5){ bx=1; bz=0; } const a0=Math.atan2(bx,bz);
+  for(const da of [0,0.45,-0.45,0.9,-0.9,1.4,-1.4,1.9,-1.9,2.5,-2.5,Math.PI]){ const dx=Math.sin(a0+da), dz=Math.cos(a0+da);
+    let e=0; while(e<45&&ground(tx+dx*e,tz+dz*e,toH+0.6).h>toH-0.35) e+=0.4; if(e<0.4||e>=45) continue;      // walk out to the edge of the destination
+    const ex=tx+dx*(e-0.35), ez=tz+dz*(e-0.35);
+         let deck=true; for(let q=0.3;q<=5;q+=0.5){ const qx=ex-dx*q, qz=ez-dz*q; if(Math.abs(ground(qx,qz,toH+0.6).h-toH)>0.35||!riderClear(qx,qz,toH+0.25)) { deck=false; break; } } if(!deck) continue;   /* the top of the lift must land on 5m of open deck */
+    for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4]){ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
+      if(Math.abs(sx)>EDGE-3||Math.abs(sz)>EDGE-3||(D.openSouth&&sz>90)) continue;
+      if(Math.abs(ground(sx,sz,y+1.2).h-y)>0.6) continue;                                                // must start on the surface you're riding
+      let ok=true; const n=Math.max(4,Math.ceil(Math.hypot(L,rise)/1.2));
+      for(let k=0;k<n&&ok;k++){ const u=k/n, px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(!riderClear(px,pz,py,u>0.8?0:0.4)) ok=false; else if(u<0.85&&rails.some(o=>{ if(o.bb&&(px<o.bb[0]-2.5||px>o.bb[1]+2.5||pz<o.bb[2]-2.5||pz>o.bb[3]+2.5)) return false; const c=railClosest(o,{x:px,y:py,z:pz}); return c.d2<6.25&&Math.abs(c.y-py)<2.5; })) ok=false;   /* lifts never cross another rail on the way up */ }
+      if(!ok) continue;
+      const pts=[]; const seg=Math.max(1,Math.ceil(L/7)); for(let k=0;k<=seg;k++){ const u=k/seg; pts.push([sx+(ex-sx)*u,y+0.7+(toH+0.15-y-0.7)*u,sz+(ez-sz)*u]); }
+      pts.push([ex-dx*1.8,toH+0.15,ez-dz*1.8]);
+      const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez]}); return rl; } }
+  // nothing clear: a steep direct rail from where the vent would have been
+  const pts=[[x,y+0.7,z],[tx,toH+0.15,tz]], rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[x,z],end:[tx,tz],fallback:true}); return rl; }
 // ====================================================================== MAP: HARBOR HEIGHTS (plaza district)
 function buildHarbor(){
 
@@ -1567,7 +1577,7 @@ function buildMidFloor(){ const T=12, y=MIDY, O=-EDGE+6, N=Math.floor((2*EDGE-12
       let ok=H(i,j)%100>=22&&!(D.openSouth&&r[3]>90);                                                  // ~22% stay open as atriums
       if(ok&&openSky.some(([a,b,c,d])=>r[0]<b&&r[1]>a&&r[2]<d&&r[3]>c)) ok=false;
       if(ok&&keep.some(([x,z])=>x>r[0]-5&&x<r[1]+5&&z>r[2]-5&&z<r[3]+5)) ok=false;
-      if(ok&&tallBlock(r[0]-0.3,r[1]+0.3,r[2]-0.3,r[3]+0.3,y-1.2,y+3)) ok=false;
+      if(ok&&tallBlock(r[0]-0.3,r[1]+0.3,r[2]-0.3,r[3]+0.3,y-2.7,y+3)) ok=false;   /* keep skate headroom over any roof below */
       occ[i][j]=ok; } }
   // greedy merge: horizontal runs, then stack identical runs into rectangles
   const used=occ.map(c=>c.map(()=>false)), rects=[];
@@ -1584,36 +1594,79 @@ function buildMidFloor(){ const T=12, y=MIDY, O=-EDGE+6, N=Math.floor((2*EDGE-12
   // atriums: a vent on the street in an open cell that launches you onto the deck beside it
   let vents=0; for(let i=1;i<N-1;i++) for(let j=1;j<N-1;j++){ if(occ[i][j]||vents>=16||(i*7+j*3)%3) continue;
     const nb=[[1,0],[-1,0],[0,1],[0,-1]].find(([a,b2])=>occ[i+a][j+b2]); if(!nb) continue; const x=O+(i+0.5)*T, z=O+(j+0.5)*T, tx=x+nb[0]*T*0.8, tz=z+nb[1]*T*0.8;
-    if(ground(x,z,1).h>0.5||blocked(x,z,0)||D.openSouth&&z>88||tallBlock(x-1.6,x+1.6,z-1.6,z+1.6,0.2,y+4)||PADS.some(p=>Math.hypot(p.x-x,p.z-z)<6)) continue;
+    if(ground(x,z,1).h>0.5||blocked(x,z,0)||D.openSouth&&z>88||tallBlock(x-1.6,x+1.6,z-1.6,z+1.6,0.2,y+4)||LIFTS.some(l=>Math.hypot(l.start[0]-x,l.start[1]-z)<6||Math.hypot(l.end[0]-x,l.end[1]-z)<6)) continue;
     launchPad(x-nb[0]*2.5,z-nb[1]*2.5,0,y,1.4,0x7ff3ff,[tx,tz],7); vents++; }
   FLOOR.midVents=vents; FLOOR.midRamps=0; }
+const SKYM={ under:toon(0x2a2738), truss:metal(0x3a3f4a), ac:metal(0xb8bcc4), tank:toon(0x8a5a3c), leg:metal(0x5a5f6a), board:toon(0x15151a) };
+/* a Sky Floor island dressed as a rooftop block: raised penthouse tier + ramp, water tower, billboard with a top rail,
+   guard rails on the corners (bridge mouths stay open), AC units and a tapered underside so it reads as architecture */
+function skyRooftop(cx,cz,S,y,n,pal,isl){ const h=S/2, sx=(n&1)?1:-1, sz=(n&2)?1:-1, B=Math.round(S*0.32), T=4;
+  const under=new THREE.Mesh(new THREE.ConeGeometry(h*1.414,14,4,1),SKYM.under); under.rotation.set(Math.PI,Math.PI/4,0); under.position.set(cx,y-1.2-7,cz); outline(under,0.1); world.add(under);
+  const glow=new THREE.Mesh(new THREE.CircleGeometry(S*0.5,24),new THREE.MeshBasicMaterial({color:0x7ff3ff,transparent:true,opacity:0.18,depthWrite:false})); glow.rotation.x=Math.PI/2; glow.position.set(cx,y-15.5,cz); world.add(glow);
+  // penthouse tier in one corner, reached by a ramp from the middle
+  const px0=sx>0?cx+h-2-B:cx-h+2, pz0=sz>0?cz+h-2-B:cz-h+2, P0=[px0,px0+B,pz0,pz0+B];
+  box2(...P0,y,y+T,toon(pal[1])); edgeRail(...P0,y+T,0xffe23a);
+  const rw=5, rz0=pz0+B/2-rw/2; if(sx>0) ramp(P0[0]-9,P0[0],rz0,rz0+rw,T,'+x',false,0xf7a7c0,{y0:y,bot:y-0.6}); else ramp(P0[1],P0[1]+9,rz0,rz0+rw,T,'-x',false,0xf7a7c0,{y0:y,bot:y-0.6});
+  // water tower on the penthouse roof
+  const tx=(P0[0]+P0[1])/2+sx*1.5, tz=(P0[2]+P0[3])/2+sz*1.5; box2(tx-1.4,tx+1.4,tz-1.4,tz+1.4,y+T,y+T+2.6,SKYM.leg);
+  const tank=new THREE.Mesh(new THREE.CylinderGeometry(1.9,1.9,3.2,12),SKYM.tank); tank.position.set(tx,y+T+4.2,tz); outline(tank,0.06); world.add(tank);
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(2.1,1.3,12),SKYM.leg); roof.position.set(tx,y+T+6.45,tz); world.add(roof);
+  // billboard in the opposite corner, panel high enough to skate under, rail along its top
+  const bx=cx-sx*(h-7), bz=cz-sz*(h-1.2); for(const o of [-2.6,2.6]) box2(bx+o-0.2,bx+o+0.2,bz-0.2,bz+0.2,y,y+2.4,SKYM.leg);
+  box2(bx-3.6,bx+3.6,bz-0.25,bz+0.25,y+2.4,y+5.6,SKYM.board);
+  const face=new THREE.Mesh(new THREE.PlaneGeometry(6.8,2.9),new THREE.MeshBasicMaterial({color:[0xff6fa8,0x7ff3ff,0xffe23a][n%3]})); face.position.set(bx,y+4,bz+sz*0.27); if(sz<0) face.rotation.y=Math.PI; world.add(face);
+  addRail([[bx-3.5,y+5.68,bz],[bx+3.5,y+5.68,bz]],{color:0xffffff,radius:0.07});
+  // AC units + a ledge in the free corners
+  const acx=cx+sx*(h-5), acz=cz-sz*(h-5); box2(acx-1.4,acx+1.4,acz-1,acz+1,y,y+1.1,SKYM.ac); box2(acx-1.4,acx+1.4,acz+sz*2.4-1,acz+sz*2.4+1,y,y+1.1,SKYM.ac);
+  const lx=cx-sx*(h-5), lz=cz+sz*(h-6); box2(lx-0.5,lx+0.5,lz-4,lz+4,y,y+0.6,toon(0xf2a52f)); addRail([[lx,y+0.67,lz-3.8],[lx,y+0.67,lz+3.8]],{color:0xffffff,radius:0.06});
+  // guard rails along each edge, leaving the middle (bridge mouths) open
+  const g=y+0.95, e=h-0.4, m=6; for(const [a0,a1] of [[-e,-m],[m,e]]){
+    addRail([[cx+a0,g,cz-e],[cx+a1,g,cz-e]],{color:0xff6fa8,radius:0.06,posts:true}); addRail([[cx+a0,g,cz+e],[cx+a1,g,cz+e]],{color:0xff6fa8,radius:0.06,posts:true});
+    addRail([[cx-e,g,cz+a0],[cx-e,g,cz+a1]],{color:0xff6fa8,radius:0.06,posts:true}); addRail([[cx+e,g,cz+a0],[cx+e,g,cz+a1]],{color:0xff6fa8,radius:0.06,posts:true}); }
+  floorFeature(cx-sx*4,cz+sz*2,y,n+2); isl.pent=P0; isl.sx=sx; isl.sz=sz; isl.bill=[bx,bz]; }
 function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
-  for(const gx of grid) for(const gz of grid){ const S=24+((Math.abs(gx*3+gz*7)>>2)%4)*2, cx=gx, cz=gz, r=[cx-S/2,cx+S/2,cz-S/2,cz+S/2];
-    if(D.openSouth&&r[3]>88) continue; if(Math.abs(cx)+S/2>EDGE-3||Math.abs(cz)+S/2>EDGE-3) continue; if(tallBlock(r[0]-2,r[1]+2,r[2]-2,r[3]+2,y-4,y+6)) continue;
-    const i0=solids.length; slab(...r,y,toon([0x39413c,0x4a3f7a,0x3a5a6a][made.length%3]),{th:1.2,pillars:false}); solids[i0].sky=true;
-    const glow=new THREE.Mesh(new THREE.CircleGeometry(S*0.62,28),new THREE.MeshBasicMaterial({color:0x7ff3ff,transparent:true,opacity:0.2,depthWrite:false})); glow.rotation.x=Math.PI/2; glow.position.set(cx,y-1.25,cz); world.add(glow);
-    const isl={x:cx,z:cz,rect:r,gx,gz,S}; made.push(isl); FLOOR.islands.push(isl); floorFeature(cx-4,cz-4,y,made.length+1); floorFeature(cx+5,cz+5,y,made.length+3); xc(cx+6,y+1.2,cz-6); }
+  for(const gx of grid) for(const gz of grid){ const cx=gx, cz=gz; let S=0, r;
+    for(const s0 of [34+(Math.abs(gx/60*3+gz/60*7)%3)*3,30,24]){ r=[cx-s0/2,cx+s0/2,cz-s0/2,cz+s0/2];
+      if(D.openSouth&&r[3]>88) continue; if(Math.abs(cx)+s0/2>EDGE-3||Math.abs(cz)+s0/2>EDGE-3) continue; if(tallBlock(r[0]-2,r[1]+2,r[2]-2,r[3]+2,y-4,y+9)) continue; S=s0; break; }
+    if(!S) continue;
+    const pal=[[0x39413c,0x6b6a60],[0x4a3f7a,0x8c7ac8],[0x3a5a6a,0x6a9aa8]][made.length%3];
+    const i0=solids.length; slab(...r,y,toon(pal[0]),{th:1.2,pillars:false}); solids[i0].sky=true;
+    const isl={x:cx,z:cz,rect:r,gx,gz,S}; skyRooftop(cx,cz,S,y,made.length,pal,isl); made.push(isl); FLOOR.islands.push(isl); xc(cx-6,y+1.2,cz+6); }
   const at=(gx,gz)=>made.find(i=>i.gx===gx&&i.gz===gz); let k=0;
   for(const a of made) for(const [dx,dz] of [[60,0],[0,60]]){ const b=at(a.gx+dx,a.gz+dz); if(!b) continue; const ax=dx!==0;
     const rr=ax?[a.rect[1]-0.5,b.rect[0]+0.5,a.z-4,a.z+4]:[a.x-4,a.x+4,a.rect[3]-0.5,b.rect[2]+0.5];
     if(tallBlock(rr[0],rr[1],rr[2],rr[3],y-3,y+4)) continue;
     if(k++%5===4) addRail(ax?[[rr[0]+0.3,y+0.12,a.z],[rr[1]-0.3,y+0.12,a.z]]:[[a.x,y+0.12,rr[2]+0.3],[a.x,y+0.12,rr[3]-0.3]],{color:0xff6fa8,radius:0.1});   // the odd grind link
-    else { const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.7,pillars:false}); solids[i0].sky=true; addRail(ax?[[rr[0]+0.5,y+0.95,rr[3]-0.2],[rr[1]-0.5,y+0.95,rr[3]-0.2]]:[[rr[1]-0.2,y+0.95,rr[2]+0.5],[rr[1]-0.2,y+0.95,rr[3]-0.5]],{color:0xff6fa8,radius:0.07,posts:true}); } }
+    else { const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.7,pillars:false}); solids[i0].sky=true; addRail(ax?[[rr[0]+0.5,y+0.95,rr[3]-0.2],[rr[1]-0.5,y+0.95,rr[3]-0.2]]:[[rr[1]-0.2,y+0.95,rr[2]+0.5],[rr[1]-0.2,y+0.95,rr[3]-0.5]],{color:0xff6fa8,radius:0.07,posts:true});
+      const tr=new THREE.Mesh(new THREE.BoxGeometry(ax?rr[1]-rr[0]:1.2,1.6,ax?1.2:rr[3]-rr[2]),SKYM.truss); tr.position.set((rr[0]+rr[1])/2,y-1.5,(rr[2]+rr[3])/2); world.add(tr); } }
   // Mid Floor vents up to the islands (never from under a deck), cables back down
   const C=FLOOR.cells; let up=0;
   for(const isl of made){ if(up>=10) break; let best=null, bd=1e9;
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T, d=Math.hypot(px-isl.x,pz-isl.z);
-      const ex=Math.max(isl.rect[0]-px,0,px-isl.rect[1]), ez=Math.max(isl.rect[2]-pz,0,pz-isl.rect[3]), edge=Math.hypot(ex,ez); if(edge<7||edge>20||Math.min(ex,ez)>2||d>=bd) continue; /* square-on to an island edge, never a corner */ if(PADS.some(p=>Math.hypot(p.x-px,p.z-pz)<6)) continue; if(tallBlock(px-1.6,px+1.6,pz-1.6,pz+1.6,MIDY+0.3,y+3)) continue; bd=d; best=[px,pz]; }
+      const ex=Math.max(isl.rect[0]-px,0,px-isl.rect[1]), ez=Math.max(isl.rect[2]-pz,0,pz-isl.rect[3]), edge=Math.hypot(ex,ez); if(edge<7||edge>20||Math.min(ex,ez)>2||d>=bd) continue; /* square-on to an island edge, never a corner */ if(LIFTS.some(l=>Math.hypot(l.start[0]-px,l.start[1]-pz)<6||Math.hypot(l.end[0]-px,l.end[1]-pz)<6)) continue; if(tallBlock(px-1.6,px+1.6,pz-1.6,pz+1.6,MIDY+0.3,y+3)) continue; bd=d; best=[px,pz]; }
     if(best){ const ix=isl.x+(best[0]-isl.x)*0.2, iz=isl.z+(best[1]-isl.z)*0.2; launchPad(best[0],best[1],MIDY,y,1.4,0xff6fa8,[ix,iz],7); isl.vent=true; up++; } }
   let down=0; for(const isl of made){ if(down>=4||isl.vent) continue; let tgt=null, bd=1e9;
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T, d=Math.hypot(px-isl.x,pz-isl.z); if(d>isl.S/2+14&&d<bd&&d<70){ bd=d; tgt=[px,pz]; } }
     if(!tgt) continue; const d=new V3(tgt[0]-isl.x,0,tgt[1]-isl.z).normalize(); addRail([[isl.x+d.x*(isl.S/2-0.3),y+0.12,isl.z+d.z*(isl.S/2-0.3)],[tgt[0],MIDY+0.6,tgt[1]]],{color:0x7ff3ff,radius:0.08}); down++; }
   FLOOR.skyVents=up; FLOOR.cables=down; }
-function floorTags(){   // 3 hidden pieces per floor, only visible while you're on it
+function floorTags(){   // spread pieces over every storey: 2 street walls under the decks, 5 on the Mid Floor, 15 up on the Sky Floor
   const mids=FLOOR.plazas.map(p=>[p.x,p.z,p.rect]).concat(FLOOR.skyways.map(s2=>{ const u=(s2.a0+s2.a1)/2; return [s2.axis==='x'?u:s2.c,s2.axis==='x'?s2.c:u,s2.rect]; }));
-  for(let i=0;i<3;i++){ const m=mids[(i*2)%Math.max(1,mids.length)]; if(m){ pushLayerTag([m[0]-1,MIDY+2.1,m[2][2]+0.9+i*0.01,0,0,1,0,1],{ymin:8,ymax:31}); } else { const r=findSpotHard(14,14,2); slab(...r,MIDY,toon(0x9aa0aa)); launchPad(r[0]-3,(r[2]+r[3])/2,0,MIDY,1.4,0x7ff3ff,[(r[0]+r[1])/2,(r[2]+r[3])/2]); pushLayerTag([(r[0]+r[1])/2,MIDY+2.1,r[2]+0.9,0,0,1,0,1],{ymin:8,ymax:31}); } }
-  const sk=FLOOR.islands.slice().sort((a,b)=>Math.hypot(b.x,b.z)-Math.hypot(a.x,a.z));
-  for(let i=0;i<3;i++){ const isl=sk[i]; if(isl){ pushLayerTag([isl.x+3,SKYY+2.1,isl.rect[3]-0.9,0,0,-1,0,1],{ymin:32}); } else { const S=window.__spire?__spire.S1:new V3(0,0,0); slab(S.x-6+i*14,S.x+6+i*14,S.z-30,S.z-18,SKYY,toon(0x39413c),{pillars:false}); pushLayerTag([S.x+i*14,SKYY+2.1,S.z-19,0,0,-1,0,1],{ymin:32}); } } }
+  const L1=D.tags.filter(t=>t[1]<8).length, GW=Math.max(2,Math.min(5,15-L1)), MW=7-GW;
+  const used=new Set(); for(let i=0;i<MW;i++){ let q=(i*7+1)%Math.max(1,mids.length); while(mids.length>5&&used.has(q)) q=(q+1)%mids.length; used.add(q); const m=mids[q]; if(m){ pushLayerTag([m[0]-1,MIDY+2.1,m[2][2]+0.9+i*0.01,0,0,1,0,1],{ymin:8,ymax:31}); } else { const r=findSpotHard(14,14,2); slab(...r,MIDY,toon(0x9aa0aa)); launchPad(r[0]-3,(r[2]+r[3])/2,0,MIDY,1.4,0x7ff3ff,[(r[0]+r[1])/2,(r[2]+r[3])/2]); pushLayerTag([(r[0]+r[1])/2,MIDY+2.1,r[2]+0.9,0,0,1,0,1],{ymin:8,ymax:31}); } }
+  /* street level: free-standing tag walls tucked under the Mid Floor decks */
+  let gnd=0; const sw=FLOOR.skyways.slice().sort((a,b)=>Math.hypot((b.rect[0]+b.rect[1])/2,(b.rect[2]+b.rect[3])/2)-Math.hypot((a.rect[0]+a.rect[1])/2,(a.rect[2]+a.rect[3])/2));
+  for(let k=0;k<sw.length&&gnd<GW;k+=2){ const R=sw[k].rect, cx=(R[0]+R[1])/2, cz=(R[2]+R[3])/2;
+    if(ground(cx,cz,1).h>0.5||blocked(cx,cz,0)||tallBlock(cx-2.2,cx+2.2,cz-1,cz+1,0.2,3.2,true)||D.tags.some(t=>Math.hypot(t[0]-cx,t[2]-cz)<20)||LIFTS.some(l=>Math.hypot(l.start[0]-cx,l.start[1]-cz)<6)) continue;
+    box2(cx-1.9,cx+1.9,cz-0.2,cz+0.2,0,3,toon(0x6b6a60)); pushLayerTag([cx,1.6,cz+0.26,0,0,1,0,1]); gnd++; }
+  for(;gnd<GW;gnd++){ const r=findSpotHard(8,8,2), cx=(r[0]+r[1])/2, cz=(r[2]+r[3])/2; box2(cx-1.9,cx+1.9,cz-0.2,cz+0.2,0,3,toon(0x6b6a60)); pushLayerTag([cx,1.6,cz+0.26,0,0,1,0,1]); }
+  /* Sky Floor: penthouse walls and billboards, spread round the whole lattice */
+  const isl=FLOOR.islands.slice().sort((a,b)=>Math.atan2(a.z,a.x)-Math.atan2(b.z,b.x)), want=15; let sky=0;
+  const pick=[]; for(let k=0;k<isl.length&&pick.length<want;k++) if(k%Math.max(1,Math.floor(isl.length/want))===0||isl.length-k<=want-pick.length) pick.push(isl[k]);
+  for(const I of pick){ if(sky>=want) break;
+    if(sky%3===2&&I.bill){ const [bx,bz]=I.bill; pushLayerTag([bx,SKYY+4,bz+I.sz*0.3,0,0,I.sz,0,1],{ymin:32}); }
+    else { const P0=I.pent, fz=I.sz>0?P0[2]-0.06:P0[3]+0.06; pushLayerTag([(P0[0]+P0[1])/2,SKYY+2.1,fz,0,0,-I.sz,0,1],{ymin:32}); }
+    sky++; }
+  for(let i=sky;i<want;i++){ const S=window.__spire?__spire.S1:new V3(0,0,0); slab(S.x-6+i*14,S.x+6+i*14,S.z-30,S.z-18,SKYY,toon(0x39413c),{pillars:false}); pushLayerTag([S.x+i*14,SKYY+2.1,S.z-19,0,0,-1,0,1],{ymin:32}); } }
 // hidden courtyards: a ring of buildings around a sunken court, one narrow alley in -- or drop in from the roofs
 function courtyard(slot){
   for(const [S,cl,tr] of [[28,4,1400],[24,4,1400],[22,3,2500],[20,2.5,4000],[18,2,6000]]){ const r=findSpot(S,S,cl,tr,1.5); if(!r) continue;
@@ -1697,7 +1750,7 @@ const loopRail=({harbor:buildHarbor,yards:buildYards,pier:buildPier}[DKEY])();
 compoundsFor();
 skateZones();
 const ROADN=buildRoads();
-const EXTRA_TAGS=15;   // per district: three hidden courtyards + the third compound's tunnel + 2 hideouts (L1) + Spire piece (L2) + 2 sky pieces (L3)
+const EXTRA_TAGS=31;   // per district: three hidden courtyards + the third compound's tunnel + 2 hideouts (L1) + Spire piece (L2) + 2 sky pieces (L3)
 const SPIRE=spire(), HIDEOUTS=[hideout(),hideout()];
 const COURTS=[0,1,2].map(()=>{ let ok=courtyard('push'); if(!ok){ IGNORE_SKATE=true; ok=courtyard('push'); IGNORE_SKATE=false; } return ok; });
 buildMidFloor(); buildSkyFloor(); floorTags();
@@ -2716,7 +2769,7 @@ function startGrind(r,s){
   const sw=P.stance<0;
   trick((sw?'Switch ':'')+(r===loopRail?D.railName:'Grind'),(r===loopRail?120:60)+(sw?40:0)); sfx.grind();
 }
-function endGrind(){ if(P.rush){ P.rushT=1.6; P.rush=false; } P.boost=Math.min(100,P.boost+Math.min(12,(P.grindT||0)*5)); P.grindT=0; P.lastRail=P.grind.r; P.noSame=0.35; P.grind=null; P.grounded=false; P.airTime=0; P.lastGrindEnd=clock; }
+function endGrind(){ P.bgT=0; P.boost=Math.min(100,P.boost+Math.min(12,(P.grindT||0)*5)); P.grindT=0; P.lastRail=P.grind.r; P.noSame=0.35; P.grind=null; P.grounded=false; P.airTime=0; P.lastGrindEnd=clock; }
 function trySnapRail(){
   if(P.noGrind>0||P.vel.y>0.5) return;
   const mag=held('magnet'), R1=mag?2.2:1.35, dyMax=mag?3:2.2;
@@ -2733,11 +2786,13 @@ function switchRail(r2,s,dirVec,name,pts){ const T2=railTan(r2,s,tmp2); let d=(d
 function grindStep(h,jump,trk,boosting,inp){
   const g=P.grind, r=g.r; const T=railTan(r,g.s,tmp);
   g.speed-=CFG.SLOPE*0.5*T.y*g.dir*h;
-  if(boosting){ g.speed=Math.min(CFG.BOOST+FLOW.state*1.5+2,g.speed+25*h); P.boost=Math.max(0,P.boost-26*h); }
+  if(boosting){ P.bgT=(P.bgT||0)+h;   /* boosting along a long grind kicks in 2X BOOST: twice the acceleration */
+    if(P.bgT>1.4&&!P.x2){ P.x2=true; popup('2X BOOST','big'); rumble(0.5,0.8,260); sfx.flowUp&&sfx.flowUp(3); flowAdd(6); }
+    g.speed=Math.min(CFG.BOOST+FLOW.state*1.5+2+(P.x2?6:0),g.speed+(P.x2?50:25)*h); P.boost=Math.max(0,P.boost-26*h);
+    if(P.x2&&Math.random()<0.8) emit(P.pos.clone(),rv(4).setY(3),0x7ff3ff,0.4,0.14,10); }
+  else P.bgT=0;
   if(held('brake')) g.speed-=18*h;
-  if(P.grindT>2.5&&!P.rush){ P.rush=true; popup('GRIND RUSH x2','big'); rumble(0.5,0.8,260); sfx.flowUp&&sfx.flowUp(3); flowAdd(10); }
-  if(P.rush){ g.speed=Math.min(40,g.speed+16*h); C.pts+=45*h; if(Math.random()<0.8) emit(P.pos.clone(),rv(4).setY(3),0x7ff3ff,0.4,0.14,10); }   // long grinds kick into a 2x rush: faster, double points
-  g.speed=clamp(g.speed,6,P.rush?40:32); g.s+=g.dir*g.speed*h;
+  g.speed=clamp(g.speed,r.lift&&g.dir>0?11:6,P.x2?38:32);   /* lifts carry you up at a steady clip */ g.s+=g.dir*g.speed*h;
   C.pts+=45*h; C.timer=CFG.COMBO_T; P.boost=Math.min(100,P.boost+12*h); P.grindT=(P.grindT||0)+h;
   P.branchCd-=h;
   // Branching: steer toward a rail that splits off here
@@ -2748,8 +2803,10 @@ function grindStep(h,jump,trk,boosting,inp){
   if(r.closed) g.s=((g.s%r.len)+r.len)%r.len;
   else if(g.s<0||g.s>r.len){
     const se=clamp(g.s,0,r.len); railPt(r,se,P.pos); const T2=railTan(r,se,tmp2).clone();
+    if(r.lift&&g.dir>0){ const k=Math.min(1,7/g.speed); P.vel.set(T2.x*g.speed*k,2,T2.z*g.speed*k); endGrind(); return; }   /* top of a grind lift: always step off onto the deck */
     const link=railAt(P.pos,r,1.1);                      // seamless rail transition
     if(link){ switchRail(link.r,link.s,T2.multiplyScalar(g.dir),'Link',60); return; }
+    if(r.lift){ const k=Math.min(1,7/g.speed); P.vel.set(T2.x*g.dir*g.speed*k,2,T2.z*g.dir*g.speed*k); endGrind(); return; }   /* top of a grind lift: step off onto the deck */
     P.vel.set(T2.x*g.dir*g.speed,Math.max(T2.y*g.dir*g.speed,0)+3,T2.z*g.dir*g.speed); endGrind(); return; }
   railPt(r,g.s,P.pos); P.vel.set(T.x*g.dir*g.speed,T.y*g.dir*g.speed,T.z*g.dir*g.speed);
   if(Math.random()<0.7) emit(P.pos.clone(),rv(3).addScaledVector(T,-g.dir*3).setY(2+Math.random()*2),Math.random()<0.5?0xffe23a:0xff9548,0.35,0.09,14);
@@ -2819,12 +2876,13 @@ function physics(h,inp,first){
   P.noGrind=Math.max(0,P.noGrind-h); if(P.padT>0&&(P.padT-=h,P.grounded)) P.padT=0; P.noSame=Math.max(0,P.noSame-h); P.noWall=Math.max(0,P.noWall-h); P.landWin=Math.max(0,P.landWin-h); P.grindCd-=h;
   const jump=first&&pressed.has('jump'), trk=first&&(pressed.has('fo')||pressed.has('fs')||pressed.has('ft'));
   const boosting=held('boost')&&P.boost>0&&P.knock<=0;
+  if(!boosting&&P.x2) P.x2=false;   /* 2X BOOST lasts as long as you keep boosting */
   if(!P.grind&&!P.wall) unstick();
   if(P.knock>0){ P.knock-=h; v.x*=(1-3*h); v.z*=(1-3*h); }
   else if(P.grind){ grindStep(h,jump,trk,boosting,inp); return; }
   else if(P.wall){ wallStep(h,jump,trk,boosting); return; }
   let hs=Math.hypot(v.x,v.z);
-  const cap=boosting?CFG.BOOST+FLOW.state*1.5:CFG.MAX;
+  const cap=boosting?CFG.BOOST+FLOW.state*1.5+(P.x2?6:0):CFG.MAX;
   const drifting=P.grounded&&held('drift')&&hs>6&&P.knock<=0;
   // powerslide: LT/L2 or pulling the stick back against your line turns you sideways and scrubs speed
   const pullBack=inp.m>0.3&&hs>2&&(v.x*inp.x+v.z*inp.z)<-0.5*hs;
@@ -2853,11 +2911,11 @@ function physics(h,inp,first){
       P.skidT=(P.skidT||0)-h; if(P.skidT<=0&&AU.ctx){ P.skidT=0.09; noiseHit(0.12,2600+hs*60,0.05,'bandpass'); } }
     else if(P.grounded&&held('brake')) hs=Math.max(0,hs-20*h);
     if(!sliding&&P.slideT>0){ if(P.slideT>0.45) trick('Powerslide',Math.round(30+P.slideT*50)); P.slideT=0; }
-    if(boosting){ if(hs<cap) hs=Math.min(cap,hs+32*h); P.boost=Math.max(0,P.boost-26*h);
+    if(boosting){ if(hs<cap) hs=Math.min(cap,hs+(P.x2?64:32)*h); P.boost=Math.max(0,P.boost-26*h);
       if(Math.random()<0.6) emit(p.clone().add(new V3(0,0.2,0)),rv(1.5).addScaledVector(v,-0.15),Math.random()<0.5?0xff7b29:0xffe23a,0.35,0.22,0); }
     if(P.grounded&&hs>cap) hs=Math.max(cap,hs-7*h);
   }
-  hs=Math.min(hs,32);
+  hs=Math.min(hs,P.x2?38:32);
   const cur=Math.hypot(v.x,v.z); if(cur>1e-4){ v.x*=hs/cur; v.z*=hs/cur; } else if(hs>0){ v.x=Math.sin(P.facing)*hs; v.z=Math.cos(P.facing)*hs; }
   if(P.grounded&&P.gs&&P.gs.type==='ramp'){ const gr=rampGrad(P.gs,p.x,p.z), gm=Math.hypot(gr.x,gr.z); let k=CFG.SLOPE/Math.sqrt(1+gm*gm);
     if(v.x*gr.x+v.z*gr.z>0) k*=P.gs.qp?0.55:0.35;
@@ -3192,9 +3250,8 @@ function updateCamera(dt){
   des.lerpVectors(tgt,des,k);
   camera.position.lerp(des,1-Math.exp(-dt*14));
   camera.lookAt(tgt.x,tgt.y+0.3,tgt.z);
-  if(P.rushT>0) P.rushT-=dt;
-  const boosting=(held('boost')&&P.boost>0&&P.knock<=0)||P.rush||P.rushT>0;   // speed FX (FOV kick + speed lines) are reserved for boosting
-  camera.fov=lerp(camera.fov,boosting?clamp(72+(hs-10)*0.9,72,90):68,dt*(boosting?5:3)); camera.updateProjectionMatrix();
+  const boosting=held('boost')&&P.boost>0&&P.knock<=0;   // speed FX (FOV kick + speed lines) are reserved for boosting
+  camera.fov=lerp(camera.fov,boosting?clamp(72+(hs-10)*0.9+(P.x2?6:0),72,96):68,dt*(boosting?5:3)); camera.updateProjectionMatrix();
   $('speedlines').style.opacity=boosting&&hs>8?0.55:0;
 }
 function attractCamera(t){ const a=t*0.06; camera.position.set(Math.cos(a)*46,16+Math.sin(t*0.2)*3,Math.sin(a)*46); camera.lookAt(0,3,0); }
@@ -3705,7 +3762,7 @@ $('district').onclick=switchDistrict; $('nextd').onclick=switchDistrict;
 // ====================================================================== ONBOARDING TIPS (each shown once, remembered)
 const TIPS={ start:'Skate to the pink arrows and TAG them · the pointer shows the nearest one', tag:'Hold E / RMB / X, then FLICK the arrows shown (mouse, arrow keys, right stick)',
   grind:'JUMP onto a rail to GRIND · SPACE again to hop off', wall:'JUMP while skating alongside a wall to WALL RIDE',
-  boost:'Hold SHIFT / RT to BOOST · grinding fills it · grind long for a 2x GRIND RUSH', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
+  boost:'Hold SHIFT / RT to BOOST · grinding fills it · boost through a long grind for 2X BOOST', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
   flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'COPS! Spray them (E / RB) to daze them · stomp drones · break line of sight to lose stars', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
 let tipSeen={}; try{ tipSeen=JSON.parse(localStorage.getItem('inkline_tips')||'{}')||{}; }catch(e){}
 let tipT=0, tipQ=[], tipCheck=0;
@@ -3751,9 +3808,9 @@ function frame(now){
   post.render();
 }
 requestAnimationFrame(frame);
-window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); } };   // debug: advance the simulation without waiting for frames
+window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); pressed.clear(); } };   // debug: advance the simulation without waiting for frames
 window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
-window.__floor=FLOOR; window.__pads=PADS;
+window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS;
 window.__game={SPIRE,HIDEOUTS,BARRIERS,COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
