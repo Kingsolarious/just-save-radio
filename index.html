@@ -678,7 +678,7 @@ function guard(a,b,y,color=0xffe23a,lift=0.9){ return addRail([[a[0],y+lift,a[1]
 // GRIND LIFTS: the only way up is to grind. Every climb is a rail that runs from the surface you're on up to the
 // edge of where you're going (grinding never drops below 6 m/s, so any climb makes it). Routed automatically:
 // it tries approach angles and steeper pitches until the line is clear of buildings and starts on solid footing.
-const LIFTS=[];
+const LIFTS=[]; let LIFT_STRICT=false;
 function riderClear(x,z,y,R=0.7){ for(const s of solids){ if(x<=s.x0-R||x>=s.x1+R||z<=s.z0-R||z>=s.z1+R) continue; const top=topAt(s,x,z); if(top>y-0.15&&(s.bot===undefined||s.bot<y+1.75)) return false; } return true; }
 function launchPad(x,z,y,toH,r,col=0x7ff3ff,target=null){ const tx=target?target[0]:x, tz=target?target[1]:z, rise=toH-y;
   let bx=x-tx, bz=z-tz; if(Math.hypot(bx,bz)<0.5){ bx=1; bz=0; } const a0=Math.atan2(bx,bz);
@@ -696,6 +696,7 @@ function launchPad(x,z,y,toH,r,col=0x7ff3ff,target=null){ const tx=target?target
       pts.push([ex-dx*1.8,toH+0.15,ez-dz*1.8]);
       const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez]}); return rl; } }
   // nothing clear: a steep direct rail from where the vent would have been
+  if(LIFT_STRICT) return null;
   const pts=[[x,y+0.7,z],[tx,toH+0.15,tz]], rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[x,z],end:[tx,tz],fallback:true}); return rl; }
 // ====================================================================== MAP: HARBOR HEIGHTS (plaza district)
 function buildHarbor(){
@@ -1569,6 +1570,21 @@ function floorFeature(cx,cz,y,k){ const t=k%4, cream=toon(0xe8e1c7);
   else { box2(cx-2.6,cx-1.4,cz-1.4,cz+1.4,y,y+0.55,cream); box2(cx+1.4,cx+2.6,cz-1.4,cz+1.4,y,y+0.55,cream); const l=new THREE.Mesh(new THREE.IcosahedronGeometry(1.1,0),leafMat); l.position.set(cx,y+1.3,cz); outline(l,0.05); world.add(l); } }
 function box2(x0,x1,z0,z1,bot,top,mat){ const m=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,top-bot,z1-z0),mat); m.position.set((x0+x1)/2,(bot+top)/2,(z0+z1)/2); m.castShadow=m.receiveShadow=true; outline(m,0.05); world.add(m);
   solids.push({type:'box',x0,x1,z0,z1,top,bot}); return m; }
+/* skyline: tall towers of every height. Five slim ones top out flush with the Sky Floor (40m) in the gaps between its islands,
+   the rest (16-36m) punch up through the Mid Floor so every storey has buildings around it */
+function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sky=0;
+  const pts=[]; for(const gx of [-120,-60,0,60]) for(const gz of [-120,-60,0,60]) pts.push([gx+30,gz+30]);
+  pts.sort((a,b)=>((a[0]*31+a[1]*17+DKEY.length*7)&15)-((b[0]*31+b[1]*17+DKEY.length*7)&15));
+  for(const [px,pz] of pts){ if(sky>=5) break; let x=0,z=0,r=null; for(const [ox,oz] of [[0,0],[0,6],[0,-6],[0,12],[0,-12],[6,0],[-6,0]]){ const q=[px+ox-3.5,px+ox+3.5,pz+oz-3.5,pz+oz+3.5]; if(spotFree(...q,0.8,keep,gates,0.5)){ r=q; x=px+ox; z=pz+oz; break; } } if(!r) continue;
+    const col=PAL[Math.floor(rnd()*PAL.length)]; sidewalk(...r,1.6); building(...r,SKYY,col); edgeRail(...r,SKYY,0x7ff3ff); FILL.push({x0:r[0],x1:r[1],z0:r[2],z1:r[3],h:SKYY});
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.2,7,6),metal(0x8a919c)); mast.position.set(x+2,SKYY+3.5,z+2); world.add(mast);
+    const blink=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,6),new THREE.MeshBasicMaterial({color:0xff2244})); blink.position.set(x+2,SKYY+7.1,z+2); world.add(blink);
+    out.push({x,z,h:SKYY,r,sky:true}); sky++; }
+  const HS=[16,18,20,22,24,26,28,30,32,34,36]; let mid=0;
+  for(let k=0;k<60&&mid<12;k++){ const w=8+Math.floor(rnd()*6), d=8+Math.floor(rnd()*6), r=findSpot(w,d,4,400,3,1); if(!r) continue; const h=HS[Math.floor(rnd()*HS.length)];
+    sidewalk(...r); building(...r,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0:r[0],x1:r[1],z0:r[2],z1:r[3],h}); roofProps(...r,h); if(rnd()<0.6) edgeRail(...r,h,[0xffe23a,0xff3d8b,0x3fd4ff][Math.floor(rnd()*3)]);
+    out.push({x:(r[0]+r[1])/2,z:(r[2]+r[3])/2,h,r}); mid++; }
+  return out; }
 function buildMidFloor(){ const T=12, y=MIDY, O=-EDGE+6, N=Math.floor((2*EDGE-12)/T), occ=[], keep=D.tags.filter(t=>t[1]>7&&t[1]<18).map(t=>[t[0],t[2]]);   // only tags up at this height clash
   const bigRamps=solids.filter(q=>q.type==='ramp'&&q.h+q.y0>=3.4&&!q.floor).map(q=>[q.x0-4,q.x1+4,q.z0-4,q.z1+4]);   // vert ramps and tall launches keep open sky
   const openSky=[[D.spawn[0]-18,D.spawn[0]+18,D.spawn[2]-18,D.spawn[2]+18]].concat(bigRamps,gateBoxes(false).slice(0,(D.gates||[]).length),NOBUILD[DKEY]&&DKEY==='harbor'?[NOBUILD.harbor[0]]:[]);
@@ -1620,9 +1636,10 @@ function skyRooftop(cx,cz,S,y,n,pal,isl){ const h=S/2, sx=(n&1)?1:-1, sz=(n&2)?1
   const acx=cx+sx*(h-5), acz=cz-sz*(h-5); box2(acx-1.4,acx+1.4,acz-1,acz+1,y,y+1.1,SKYM.ac); box2(acx-1.4,acx+1.4,acz+sz*2.4-1,acz+sz*2.4+1,y,y+1.1,SKYM.ac);
   const lx=cx-sx*(h-5), lz=cz+sz*(h-6); box2(lx-0.5,lx+0.5,lz-4,lz+4,y,y+0.6,toon(0xf2a52f)); addRail([[lx,y+0.67,lz-3.8],[lx,y+0.67,lz+3.8]],{color:0xffffff,radius:0.06});
   // guard rails along each edge, leaving the middle (bridge mouths) open
-  const g=y+0.95, e=h-0.4, m=6; for(const [a0,a1] of [[-e,-m],[m,e]]){
-    addRail([[cx+a0,g,cz-e],[cx+a1,g,cz-e]],{color:0xff6fa8,radius:0.06,posts:true}); addRail([[cx+a0,g,cz+e],[cx+a1,g,cz+e]],{color:0xff6fa8,radius:0.06,posts:true});
-    addRail([[cx-e,g,cz+a0],[cx-e,g,cz+a1]],{color:0xff6fa8,radius:0.06,posts:true}); addRail([[cx+e,g,cz+a0],[cx+e,g,cz+a1]],{color:0xff6fa8,radius:0.06,posts:true}); }
+  const g=y+0.95, e=h-0.4, op=isl.open||{}, gr=(pts)=>addRail(pts,{color:0xff6fa8,radius:0.06,posts:true});
+  for(const [side,m0] of Object.entries({nz:op.nz,pz:op.pz,nx:op.nx,px:op.px})){ const m=m0??6; if(m>=e-1.5) continue;   /* deck mouths stay open */
+    for(const [a0,a1] of [[-e,-m],[m,e]]){ if(side==='nz') gr([[cx+a0,g,cz-e],[cx+a1,g,cz-e]]); else if(side==='pz') gr([[cx+a0,g,cz+e],[cx+a1,g,cz+e]]);
+      else if(side==='nx') gr([[cx-e,g,cz+a0],[cx-e,g,cz+a1]]); else gr([[cx+e,g,cz+a0],[cx+e,g,cz+a1]]); } }
   floorFeature(cx-sx*4,cz+sz*2,y,n+2); if(S>=40) skyExtras(cx,cz,S,y,n,sx,sz); isl.pent=P0; isl.sx=sx; isl.sz=sz; isl.bill=[bx,bz]; }
 /* more to skate on the bigger islands: a funbox, a stair set with a handrail, a shed with a planter and bench */
 function skyExtras(cx,cz,S,y,n,sx,sz){ const h=S/2;
@@ -1646,30 +1663,56 @@ function buildSummit(made){ const C0=made.slice().sort((a,b)=>Math.hypot(a.x,a.z
   launchPad(x+C0.sx*8,z+C0.sz*8,SKYY,TY,1.4,0xf2c83a,[x,z]);
   FLOOR.summit={x,y:TY,z}; }
 function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
+  // 1) island blocks on the lattice
   for(const gx of grid) for(const gz of grid){ const cx=gx, cz=gz; let S=0, r;
     for(const s0 of [44+(Math.abs(gx/60*3+gz/60*7)%3)*2,40,34,26]){ r=[cx-s0/2,cx+s0/2,cz-s0/2,cz+s0/2];
       if(D.openSouth&&r[3]>88) continue; if(Math.abs(cx)+s0/2>EDGE-3||Math.abs(cz)+s0/2>EDGE-3) continue; if(tallBlock(r[0]-2,r[1]+2,r[2]-2,r[3]+2,y-4,y+9)) continue; S=s0; break; }
-    if(!S) continue;
-    const pal=[[0x39413c,0x6b6a60],[0x4a3f7a,0x8c7ac8],[0x3a5a6a,0x6a9aa8]][made.length%3];
-    const i0=solids.length; slab(...r,y,toon(pal[0]),{th:1.2,pillars:false}); solids[i0].sky=true;
-    const isl={x:cx,z:cz,rect:r,gx,gz,S}; skyRooftop(cx,cz,S,y,made.length,pal,isl); made.push(isl); FLOOR.islands.push(isl); xc(cx-6,y+1.2,cz+6); }
-  const at=(gx,gz)=>made.find(i=>i.gx===gx&&i.gz===gz); let k=0;
+    if(S) made.push({x:cx,z:cz,rect:r,gx,gz,S,open:{}}); }
+  // 2) wide skate decks fill the gaps between neighbours (corner gaps stay open: that's where the lifts come up)
+  const at=(gx,gz)=>made.find(i=>i.gx===gx&&i.gz===gz), decks=[];
   for(const a of made) for(const [dx,dz] of [[60,0],[0,60]]){ const b=at(a.gx+dx,a.gz+dz); if(!b) continue; const ax=dx!==0;
-    const rr=ax?[a.rect[1]-0.5,b.rect[0]+0.5,a.z-4,a.z+4]:[a.x-4,a.x+4,a.rect[3]-0.5,b.rect[2]+0.5];
-    if(tallBlock(rr[0],rr[1],rr[2],rr[3],y-3,y+4)) continue;
-    if(k++%5===4) addRail(ax?[[rr[0]+0.3,y+0.12,a.z],[rr[1]-0.3,y+0.12,a.z]]:[[a.x,y+0.12,rr[2]+0.3],[a.x,y+0.12,rr[3]-0.3]],{color:0xff6fa8,radius:0.1});   // the odd grind link
-    else { const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.7,pillars:false}); solids[i0].sky=true; addRail(ax?[[rr[0]+0.5,y+0.95,rr[3]-0.2],[rr[1]-0.5,y+0.95,rr[3]-0.2]]:[[rr[1]-0.2,y+0.95,rr[2]+0.5],[rr[1]-0.2,y+0.95,rr[3]-0.5]],{color:0xff6fa8,radius:0.07,posts:true});
-      const tr=new THREE.Mesh(new THREE.BoxGeometry(ax?rr[1]-rr[0]:1.2,1.6,ax?1.2:rr[3]-rr[2]),SKYM.truss); tr.position.set((rr[0]+rr[1])/2,y-1.5,(rr[2]+rr[3])/2); world.add(tr); } }
+    for(const w of [Math.min(a.S,b.S)-14,18,8]){ const rr=ax?[a.rect[1]-0.5,b.rect[0]+0.5,a.z-w/2,a.z+w/2]:[a.x-w/2,a.x+w/2,a.rect[3]-0.5,b.rect[2]+0.5];
+      if(tallBlock(rr[0],rr[1],rr[2],rr[3],y-3,y+4)) continue;
+      decks.push({rr,ax,w,a,b}); a.open[ax?'px':'pz']=w/2+0.3; b.open[ax?'nx':'nz']=w/2+0.3; break; } }
+  // 3) dress the islands now we know which sides open onto a deck
+  for(const isl of made){ const pal=[[0x39413c,0x6b6a60],[0x4a3f7a,0x8c7ac8],[0x3a5a6a,0x6a9aa8]][FLOOR.islands.length%3];
+    const i0=solids.length; slab(...isl.rect,y,toon(pal[0]),{th:1.2,pillars:false}); solids[i0].sky=true;
+    skyRooftop(isl.x,isl.z,isl.S,y,FLOOR.islands.length,pal,isl); FLOOR.islands.push(isl); xc(isl.x-6,y+1.2,isl.z+6); }
+  // 4) the decks: guard rails on the open edges, something to skate in the middle, a truss underneath
+  let k=0; for(const {rr,ax,w} of decks){ const i0=solids.length; slab(...rr,y,toon([0x2a2738,0x3a3448,0x30303c][k%3]),{th:0.8,pillars:false}); solids[i0].sky=true;
+    const g=y+0.95, gr=(pts)=>addRail(pts,{color:0xff6fa8,radius:0.07,posts:true});
+    if(ax){ gr([[rr[0]+0.5,g,rr[2]+0.2],[rr[1]-0.5,g,rr[2]+0.2]]); gr([[rr[0]+0.5,g,rr[3]-0.2],[rr[1]-0.5,g,rr[3]-0.2]]); }
+    else { gr([[rr[0]+0.2,g,rr[2]+0.5],[rr[0]+0.2,g,rr[3]-0.5]]); gr([[rr[1]-0.2,g,rr[2]+0.5],[rr[1]-0.2,g,rr[3]-0.5]]); }
+    const mx=(rr[0]+rr[1])/2, mz=(rr[2]+rr[3])/2, L=ax?rr[1]-rr[0]:rr[3]-rr[2];
+    if(w>=18&&L>=10){ const off=w/4, t=k%3;
+      if(t===0){ const cx=ax?mx:mx+off, cz=ax?mz+off:mz; box2(cx-(ax?3:0.5),cx+(ax?3:0.5),cz-(ax?0.5:3),cz+(ax?0.5:3),y,y+0.6,toon(0xf2a52f));   // manual pad
+        addRail(ax?[[cx-2.8,y+0.67,cz],[cx+2.8,y+0.67,cz]]:[[cx,y+0.67,cz-2.8],[cx,y+0.67,cz+2.8]],{color:0xffffff,radius:0.06}); }
+      else if(t===1){ const cx=ax?mx:mx-off, cz=ax?mz-off:mz; if(ax){ ramp(cx-4,cx,cz-2,cz+2,1.4,'+x',false,0xf7a7c0,{y0:y,bot:y-0.6}); ramp(cx,cx+4,cz-2,cz+2,1.4,'-x',false,0xf7a7c0,{y0:y,bot:y-0.6}); }   // pyramid hip
+        else { ramp(cx-2,cx+2,cz-4,cz,1.4,'+z',false,0xf7a7c0,{y0:y,bot:y-0.6}); ramp(cx-2,cx+2,cz,cz+4,1.4,'-z',false,0xf7a7c0,{y0:y,bot:y-0.6}); } }
+      else { const cx=ax?mx:mx+off, cz=ax?mz+off:mz; box2(cx-1.2,cx+1.2,cz-1.2,cz+1.2,y,y+0.6,toon(0x777b70)); const l=new THREE.Mesh(new THREE.IcosahedronGeometry(1.3,0),leafMat); l.position.set(cx,y+1.6,cz); outline(l,0.05); world.add(l); } }
+    if(k%4===1) xc(mx,y+1.2,mz);
+    const tr=new THREE.Mesh(new THREE.BoxGeometry(ax?L:1.4,1.8,ax?1.4:L),SKYM.truss); tr.position.set(mx,y-1.7,mz); world.add(tr); k++; }
+  FLOOR.decks=decks.length;
+  for(const T of TOWERS.filter(t=>t.sky)){ const [x0,x1,z0,z1]=T.r;   /* short catwalks from each 40m tower roof to the Sky Floor */
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const ex=dx>0?x1:dx<0?x0:T.x, ez=dz>0?z1:dz<0?z0:T.z; let g=0;
+      for(let q=0.5;q<=9;q+=0.5) if(Math.abs(ground(ex+dx*q,ez+dz*q,y+0.6).h-y)<0.3){ g=q; break; } if(!g) continue;
+      const rr=dx?[Math.min(ex,ex+dx*(g+0.5)),Math.max(ex,ex+dx*(g+0.5)),T.z-2,T.z+2]:[T.x-2,T.x+2,Math.min(ez,ez+dz*(g+0.5)),Math.max(ez,ez+dz*(g+0.5))];
+      const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.5,pillars:false}); solids[i0].sky=true; } }
   buildSummit(made);
   // Mid Floor vents up to the islands (never from under a deck), cables back down
-  const C=FLOOR.cells; let up=0;
-  for(const isl of made){ if(up>=10) break; let best=null, bd=1e9;
-    for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T, d=Math.hypot(px-isl.x,pz-isl.z);
-      const ex=Math.max(isl.rect[0]-px,0,px-isl.rect[1]), ez=Math.max(isl.rect[2]-pz,0,pz-isl.rect[3]), edge=Math.hypot(ex,ez); if(edge<7||edge>20||Math.min(ex,ez)>2||d>=bd) continue; /* square-on to an island edge, never a corner */ if(LIFTS.some(l=>Math.hypot(l.start[0]-px,l.start[1]-pz)<6||Math.hypot(l.end[0]-px,l.end[1]-pz)<6)) continue; if(tallBlock(px-1.6,px+1.6,pz-1.6,pz+1.6,MIDY+0.3,y+3)) continue; bd=d; best=[px,pz]; }
-    if(best){ const ix=isl.x+(best[0]-isl.x)*0.2, iz=isl.z+(best[1]-isl.z)*0.2; launchPad(best[0],best[1],MIDY,y,1.4,0xff6fa8,[ix,iz],7); isl.vent=true; up++; } }
+  const C=FLOOR.cells; let up=0; LIFT_STRICT=true;
+  for(const isl of made){ if(up>=10) break; const cand=[];
+    for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T;
+      const ex=Math.max(isl.rect[0]-px,0,px-isl.rect[1]), ez=Math.max(isl.rect[2]-pz,0,pz-isl.rect[3]), edge=Math.hypot(ex,ez); if(edge<4||edge>26) continue;
+      if(ground(px,pz,y+3).h>y-3) continue;   /* open sky overhead: lifts come up through the gaps between decks */
+      if(LIFTS.some(l=>Math.hypot(l.start[0]-px,l.start[1]-pz)<6||Math.hypot(l.end[0]-px,l.end[1]-pz)<6)) continue; if(tallBlock(px-1.6,px+1.6,pz-1.6,pz+1.6,MIDY+0.3,y+3,true)) continue; cand.push([edge,px,pz]); }
+    cand.sort((p,q)=>p[0]-q[0]);
+    for(const [,px,pz] of cand.slice(0,8)){ const ix=clamp(px,isl.rect[0]+4,isl.rect[1]-4), iz=clamp(pz,isl.rect[2]+4,isl.rect[3]-4);
+      if(launchPad(px,pz,MIDY,y,1.4,0xff6fa8,[ix,iz],7)){ isl.vent=true; up++; break; } } }
+  LIFT_STRICT=false;
   let down=0; for(const isl of made){ if(down>=4||isl.vent) continue; let tgt=null, bd=1e9;
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T, d=Math.hypot(px-isl.x,pz-isl.z); if(d>isl.S/2+14&&d<bd&&d<70){ bd=d; tgt=[px,pz]; } }
-    if(!tgt) continue; const d=new V3(tgt[0]-isl.x,0,tgt[1]-isl.z).normalize(); addRail([[isl.x+d.x*(isl.S/2-0.3),y+0.12,isl.z+d.z*(isl.S/2-0.3)],[tgt[0],MIDY+0.6,tgt[1]]],{color:0x7ff3ff,radius:0.08}); down++; }
+    if(!tgt) continue; const d=new V3(tgt[0]-isl.x,0,tgt[1]-isl.z).normalize(); { const sx0=isl.x+d.x*(isl.S/2-0.3), sz0=isl.z+d.z*(isl.S/2-0.3); let clear=true; for(let u=0.08;u<0.95;u+=0.06){ const px=sx0+(tgt[0]-sx0)*u, pz=sz0+(tgt[1]-sz0)*u, py=y+0.12+(MIDY+0.6-y-0.12)*u; if(!riderClear(px,pz,py,0.3)) { clear=false; break; } } if(!clear) continue; } addRail([[isl.x+d.x*(isl.S/2-0.3),y+0.12,isl.z+d.z*(isl.S/2-0.3)],[tgt[0],MIDY+0.6,tgt[1]]],{color:0x7ff3ff,radius:0.08}); down++; }
   FLOOR.skyVents=up; FLOOR.cables=down; }
 function floorTags(){   // spread pieces over every storey: 2 street walls under the decks, 5 on the Mid Floor, 15 up on the Sky Floor
   const mids=FLOOR.plazas.map(p=>[p.x,p.z,p.rect]).concat(FLOOR.skyways.map(s2=>{ const u=(s2.a0+s2.a1)/2; return [s2.axis==='x'?u:s2.c,s2.axis==='x'?s2.c:u,s2.rect]; }));
@@ -1775,6 +1818,7 @@ const ROADN=buildRoads();
 const EXTRA_TAGS=31;   // per district: three hidden courtyards + the third compound's tunnel + 2 hideouts (L1) + Spire piece (L2) + 2 sky pieces (L3)
 const SPIRE=spire(), HIDEOUTS=[hideout(),hideout()];
 const COURTS=[0,1,2].map(()=>{ let ok=courtyard('push'); if(!ok){ IGNORE_SKATE=true; ok=courtyard('push'); IGNORE_SKATE=false; } return ok; });
+const TOWERS=cityTowers();
 buildMidFloor(); buildSkyFloor(); floorTags();
 const CHAINS=Array.from({length:6},()=>chainBlock()).filter(Boolean).length;
 const MEGA=megaRamps();
@@ -3832,7 +3876,7 @@ function frame(now){
 requestAnimationFrame(frame);
 window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); pressed.clear(); } };   // debug: advance the simulation without waiting for frames
 window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
-window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS;
+window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS; window.__towers=TOWERS;
 window.__game={SPIRE,HIDEOUTS,BARRIERS,COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
