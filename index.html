@@ -1600,8 +1600,35 @@ function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sk
         sidewalk(...q,1); building(...q,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0:q[0],x1:q[1],z0:q[2],z1:q[3],h}); if(h<34&&w>=7&&d>=7) roofProps(...q,h); if(rnd()<0.6) edgeRail(...q,h,[0xffe23a,0xff3d8b,0x3fd4ff,0xffffff][n%4]);
         const B={x:(q[0]+q[1])/2,z:(q[2]+q[3])/2,h,r:q,cluster:cid}; out.push(B); Q.push(B); n++; budded++; } }
     if(n){ T0.cluster=cid; clusters++; } }
-  FLOOR.clusters=clusters; FLOOR.budded=budded;
+  FLOOR.clusters=clusters; FLOOR.budded=budded; FLOOR.clusterBridges=clusterBridges(out);
   return out; }
+/* skybridges across the cluster alleys: level roofs get a flat deck, a small step gets a ramp across, a big drop gets a ramp
+   running down onto the lower roof (or a grind rail when there's no room) -- guard rails on both sides */
+function clusterBridges(T){ let n=0; const deck=toon(0x39413c), rampC=0x8fb7a2, used=new Map(), cnt=t=>used.get(t)||0;
+  const gr=(a,b)=>addRail([a,b],{color:0xffe23a,radius:0.07,posts:true});
+  for(let i=0;i<T.length;i++) for(let j=i+1;j<T.length;j++){ const A=T[i], B=T[j]; if(A.sky||B.sky||cnt(A)>=2||cnt(B)>=2) continue;
+    if(A.cluster===undefined&&B.cluster===undefined) continue;
+    for(const ax of [0,1]){ const [a0,a1,o0,o1]=ax===0?[0,1,2,3]:[2,3,0,1], lo=Math.max(A.r[o0],B.r[o0]), hi=Math.min(A.r[o1],B.r[o1]); if(hi-lo<2.6) continue;
+      const [L,R]=A.r[a1]<=B.r[a0]?[A,B]:B.r[a1]<=A.r[a0]?[B,A]:[null,null]; if(!L) continue;
+      const g0=L.r[a1], g1=R.r[a0], gap=g1-g0; if(gap<1.5||gap>6.5) continue;
+      const W=Math.min(3.2,hi-lo-0.4), c=(lo+hi)/2, hiB=L.h>=R.h?L:R, loB=hiB===L?R:L, dh=hiB.h-loB.h, yl=loB.h, yh=hiB.h;
+      const span=(u0,u1)=>ax===0?[u0,u1,c-W/2,c+W/2]:[c-W/2,c+W/2,u0,u1];
+      const toLo=loB===R?1:-1;   // +1: the low roof is on the far (+axis) side
+      let rect, kind;
+      if(dh<0.1){ rect=span(g0,g1); kind='flat'; }
+      else if(dh/gap<=0.75){ rect=span(g0,g1); kind='ramp'; }
+      else { const Lr=dh/0.7, room=gap+(loB.r[a1]-loB.r[a0])-1.5; if(Lr<=room){ const e=toLo>0?g0:g1; rect=toLo>0?span(e,e+Lr):span(e-Lr,e); kind='drop'; } else kind='rail'; }
+      if(kind!=='rail'){ const blk=solids.some(s=>{ if(rect[0]>=s.x1||rect[1]<=s.x0||rect[2]>=s.z1||rect[3]<=s.z0) return false; const top=s.top??(s.y0+s.h);
+          if(Math.abs(s.x0-loB.r[0])<0.01&&Math.abs(s.z0-loB.r[2])<0.01||Math.abs(s.x0-hiB.r[0])<0.01&&Math.abs(s.z0-hiB.r[2])<0.01) return false; return top>yl-0.3&&(s.bot===undefined||s.bot<yh+2); });
+        if(blk) continue; }
+      if(kind==='flat'){ const i0=solids.length; slab(...rect,yl,deck,{th:0.5,pillars:false}); }
+      else if(kind==='ramp'||kind==='drop'){ const dir=(ax===0?(toLo>0?'-x':'+x'):(toLo>0?'-z':'+z')); ramp(...rect,dh,dir,false,rampC,{y0:yl,bot:yl-0.5}); }
+      else { const e0=toLo>0?g0:g1, e1=toLo>0?g1+1.5:g0-1.5; const p0=ax===0?[e0-toLo*0.4,yh+0.12,c]:[c,yh+0.12,e0-toLo*0.4], p1=ax===0?[e1,yl+0.5,c]:[c,yl+0.5,e1]; addRail([p0,p1],{color:0xffe23a,radius:0.09,posts:true}); }
+      if(kind!=='rail'){ const s0=ax===0?rect[0]:rect[2], s1=ax===0?rect[1]:rect[3], hAt=u=>kind==='flat'?yl:(toLo>0?yh-(u-s0)/(s1-s0)*dh:yl+(u-s0)/(s1-s0)*dh);
+        for(const side of [-1,1]){ const cc=c+side*(W/2-0.15); gr(ax===0?[s0+0.3,hAt(s0+0.3)+0.9,cc]:[cc,hAt(s0+0.3)+0.9,s0+0.3],ax===0?[s1-0.3,hAt(s1-0.3)+0.9,cc]:[cc,hAt(s1-0.3)+0.9,s1-0.3]); } }
+      (FLOOR.cbList??=[]).push({hi:hiB,lo:loB,kind,ax,c,toLo});
+      used.set(A,cnt(A)+1); used.set(B,cnt(B)+1); n++; break; } }
+  return n; }
 function buildMidFloor(){ const T=12, y=MIDY, O=-EDGE+6, N=Math.floor((2*EDGE-12)/T), occ=[], keep=D.tags.filter(t=>t[1]>7&&t[1]<18).map(t=>[t[0],t[2]]);   // only tags up at this height clash
   const bigRamps=solids.filter(q=>q.type==='ramp'&&q.h+q.y0>=3.4&&!q.floor).map(q=>[q.x0-4,q.x1+4,q.z0-4,q.z1+4]);   // vert ramps and tall launches keep open sky
   const openSky=[[D.spawn[0]-18,D.spawn[0]+18,D.spawn[2]-18,D.spawn[2]+18]].concat(bigRamps,gateBoxes(false).slice(0,(D.gates||[]).length),NOBUILD[DKEY]&&DKEY==='harbor'?[NOBUILD.harbor[0]]:[]);
