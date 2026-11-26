@@ -35,6 +35,12 @@
   #cans { position:absolute; left:18px; top:134px; font-size:16px; box-shadow:5px 5px 0 var(--lime); }
   #boost { position:absolute; left:18px; bottom:22px; height:26px; width:260px; height:26px; border:3px solid #fff; background:#111; transform:skewX(-14deg); box-shadow:5px 5px 0 var(--pink); }
   #boostfill { height:100%; width:50%; background:linear-gradient(90deg,#ff7b29,#ffe23a); }
+  #hp { position:absolute; left:18px; bottom:104px; height:18px; width:200px; border:3px solid #fff; background:#111; transform:skewX(-14deg); box-shadow:4px 4px 0 var(--cyan); }
+  #hpfill { height:100%; width:100%; background:linear-gradient(90deg,#e94b42,#ff8a7a); transition:width .15s; }
+  #hp span { position:absolute; left:8px; top:0; font-size:11px; color:#111; text-shadow:0 0 2px #fff; }
+  #wantedinfo { position:absolute; right:18px; top:100px; font-size:13px; text-align:right; text-shadow:2px 2px 0 #111; letter-spacing:1px; }
+  #wantedinfo.seen { color:#ff3d5a; } #wantedinfo.hidden2 { color:#7ff3ff; }
+  #hurt { position:absolute; inset:0; pointer-events:none; opacity:0; background:radial-gradient(circle at 50% 50%, transparent 45%, rgba(233,30,50,.55)); transition:opacity .25s; zoom:1 !important; }
   #boost span { position:absolute; left:8px; top:2px; font-size:13px; color:#111; mix-blend-mode:normal; text-shadow:0 0 2px #fff; }
   #combo { position:absolute; left:50%; top:16%; transform:translateX(-50%); text-align:center; }
   #combo-list { font-size:16px; text-shadow:2px 2px 0 #111, -1px -1px 0 #111; max-width:70vw; }
@@ -128,6 +134,9 @@
   <div id="tags" class="chip">TAGS <span id="tagc">0/0</span></div>
   <div id="cans" class="chip">CANS <span id="canc">0</span></div>
   <div id="boost"><div id="boostfill"></div><span>BOOST</span></div>
+  <div id="hp"><div id="hpfill"></div><span>HEALTH</span></div>
+  <div id="wantedinfo"></div>
+  <div id="hurt"></div>
   <div id="flow"><div id="flowfill"></div><span id="flowname">CRUISING</span><b id="flowmult">×1</b></div>
   <div id="combo"><div id="combo-list"></div><div id="combo-pts"></div><div id="combobar"><div id="combobarfill"></div></div></div>
   <div id="tagptr"><div class="arw"></div><span id="tagdist"></span></div>
@@ -2038,7 +2047,7 @@ function updateParts(dt){ for(const p of parts){ if(p.life<=0) continue; p.life-
 const rv=(s)=>new V3((Math.random()-0.5)*s,(Math.random()-0.5)*s,(Math.random()-0.5)*s);
 
 // ====================================================================== DRONES
-const drones=[];
+const drones=[];   // (legacy name kept for the minimap; police drones live in PDRONES)
 const droneBody=metal(0xe8e1c7), droneRed=new THREE.MeshBasicMaterial({color:0xff2244}), droneBlue=new THREE.MeshBasicMaterial({color:0x2266ff});
 function makeDrone(){
   const g=new THREE.Group();
@@ -2047,11 +2056,114 @@ function makeDrone(){
   const pupil=new THREE.Mesh(new THREE.CircleGeometry(0.11,12),new THREE.MeshBasicMaterial({color:0xff2244})); pupil.position.z=0.6; g.add(pupil);
   const ring=new THREE.Mesh(new THREE.TorusGeometry(0.95,0.07,6,24),toon(0x2d3350)); ring.rotation.x=Math.PI/2; outline(ring,0.03); g.add(ring);
   const siren=new THREE.Mesh(new THREE.SphereGeometry(0.16,8,6),droneRed); siren.position.y=0.62; g.add(siren);
+  const cone=new THREE.Mesh(new THREE.ConeGeometry(4,7,20,1,true),new THREE.MeshBasicMaterial({color:0xfff2a8,transparent:true,opacity:0.12,depthWrite:false,side:THREE.DoubleSide})); cone.position.y=-3.6; g.add(cone);   // searchlight
   g.castShadow=true; scene.add(g);
-  return {g,siren,ring,alive:true,respawn:0,pos:new V3()};
+  return {g,siren,ring,cone,alive:true,respawn:0,pos:new V3()};
 }
-function placeDrone(d){ const a=Math.random()*Math.PI*2; d.pos.set(Math.cos(a)*120,9,Math.sin(a)*120); d.g.position.copy(d.pos); d.alive=true; d.g.visible=true; }
 
+// ====================================================================== POLICE: cops on foot, spotter drones, wanted stars
+// Each tag adds a wanted star. Cops are slower than a skater and need line of sight; a cop who loses you can launch a
+// short-range drone that flies to your last known spot and radios it to every cop. Stay unseen (or 50m+ away) to shed stars.
+// Spray a cop or drone to daze it (they lose track of you). Cops shoot and tackle; run out of health and you're BUSTED.
+const COPS=[], PDRONES=[]; let lastKnown=null, evadeT=0, spotT=0, copSpawnT=0, alertMsgT=0;
+const COPM={ jacket:toon(0x26305a), shirt:toon(0x8fb0e8), skin:toon(0xc98b62), cap:toon(0x1b1f3a), badge:metal(0xf2c83a), boot:toon(0x15151c), star:new THREE.MeshBasicMaterial({color:0xffe23a}) };
+function limb(w,h,d,mat,y){ const piv=new THREE.Group(); piv.position.y=y; const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.y=-h/2; outline(m,0.03); piv.add(m); return piv; }
+function makeCop(){ const g=new THREE.Group();
+  const legL=limb(0.24,0.92,0.26,COPM.jacket,0.95), legR=limb(0.24,0.92,0.26,COPM.jacket,0.95); legL.position.x=-0.15; legR.position.x=0.15; g.add(legL,legR);
+  for(const L of [legL,legR]){ const b=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.14,0.36),COPM.boot); b.position.set(0,-0.87,0.05); L.add(b); }
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.78,0.36),COPM.jacket); torso.position.y=1.36; outline(torso,0.04); g.add(torso);
+  const shirt=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.5,0.02),COPM.shirt); shirt.position.set(0,1.42,0.19); g.add(shirt);
+  const badge=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.13,0.03),COPM.badge); badge.position.set(-0.17,1.52,0.19); g.add(badge);
+  const armL=limb(0.18,0.72,0.2,COPM.jacket,1.7), armR=limb(0.18,0.72,0.2,COPM.jacket,1.7); armL.position.x=-0.42; armR.position.x=0.42; g.add(armL,armR);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.21,12,10),COPM.skin); head.position.y=1.98; outline(head,0.03); g.add(head);
+  const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.23,0.23,0.14,12),COPM.cap); cap.position.y=2.14; outline(cap,0.03); g.add(cap);
+  const brim=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.04,0.18),COPM.cap); brim.position.set(0,2.08,0.2); g.add(brim);
+  const stars=new THREE.Group(); stars.position.y=2.5; stars.visible=false; for(let k=0;k<3;k++){ const st=new THREE.Mesh(new THREE.OctahedronGeometry(0.11),COPM.star); const a=k/3*Math.PI*2; st.position.set(Math.cos(a)*0.4,0,Math.sin(a)*0.4); stars.add(st); } g.add(stars);
+  const flash=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6),new THREE.MeshBasicMaterial({color:0xfff2a8})); flash.position.set(0,-0.72,0.12); flash.visible=false; armR.add(flash);
+  scene.add(g); return {g,legL,legR,armL,armR,stars,flash,pos:new V3(),y:0,yaw:0,daze:0,see:false,losT:0,shootCd:2.5,droneCd:5,wander:null,walk:0,leave:false,flashT:0};
+}
+function eyeLine(a,b){ const d=b.clone().sub(a), L=d.length(), n=Math.max(2,Math.ceil(L/1.8)), q=new V3();
+  for(let i=1;i<n;i++){ q.copy(a).addScaledVector(d,i/n);
+    for(const s of solids){ if(q.x<=s.x0||q.x>=s.x1||q.z<=s.z0||q.z>=s.z1) continue; if(s.bot!==undefined&&q.y<s.bot) continue; if(topAt(s,q.x,q.z)>q.y) return false; } }
+  return true; }
+function copSpawnPoint(){ for(let k=0;k<80;k++){ let x,z;
+    if(ROADS.length&&k%2===0){ const r=ROADS[Math.floor(Math.random()*ROADS.length)], u=r.a0+Math.random()*(r.a1-r.a0); x=r.axis==='x'?u:r.c; z=r.axis==='x'?r.c:u; }
+    else { x=(Math.random()-0.5)*2*(EDGE-8); z=(Math.random()-0.5)*2*(EDGE-8); }
+    const d=Math.hypot(x-P.pos.x,z-P.pos.z); if(d<42||d>110) continue; if(D.openSouth&&z>88) continue;
+    if(ground(x,z,1).h>0.6||blocked(x,z,0)||insideSolid(new V3(x,0.5,z))) continue;
+    if(k<50&&eyeLine(new V3(x,1.7,z),P.pos.clone().setY(P.pos.y+1.2))) continue;            // prefer arriving out of sight
+    return new V3(x,0,z); }
+  return null; }
+function copSees(c){ const dx=P.pos.x-c.pos.x, dz=P.pos.z-c.pos.z, d=Math.hypot(dx,dz); if(d>38||P.pos.y-c.y>7) return false;
+  const fwd=Math.sin(c.yaw)*dx/d+Math.cos(c.yaw)*dz/d; if(d>8&&fwd<-0.2) return false;                            // can't see behind unless close
+  return eyeLine(c.pos.clone().setY(c.y+1.8),P.pos.clone().setY(P.pos.y+1.2)); }
+function hurt(n,why){ if(P.invuln>0||state!=='play') return; P.hp=Math.max(0,P.hp-n); P.hurtT=0; rumble(0.6,0.9,180); $('hurt').style.opacity=1; setTimeout(()=>$('hurt').style.opacity=0,180);
+  blip(140,0.12,'sawtooth',0.12,70); if(why) popup(why,'bad'); if(P.hp<=0) busted(); }
+function busted(){ message('BUSTED!<br><span style="font-size:22px">BACK TO YOUR LAST CHECKPOINT</span>',2.4); sfx.alarm&&sfx.alarm();
+  if(P.grind) endGrind(); if(P.wall) endWall(); dropCombo(); P.cans=Math.max(0,P.cans-3); heat=0; evadeT=0; lastKnown=null; clearPolice();
+  const cp=P.checkpoint||new V3(...D.spawn); P.pos.copy(cp); P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.hp=100; P.invuln=3; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); saveRun(); }
+function clearPolice(){ for(const c of COPS) scene.remove(c.g); COPS.length=0; for(const d of PDRONES) scene.remove(d.g); PDRONES.length=0; }
+function shoot(c){ const from=c.pos.clone().setY(c.y+1.45), to=P.pos.clone().setY(P.pos.y+1.1), hs=Math.hypot(P.vel.x,P.vel.z), d=from.distanceTo(to);
+  let chance=0.72-hs*0.024-(P.grind?0.14:0)-(!P.grounded&&!P.grind?0.12:0); if(d<10) chance+=0.12; chance=clamp(chance,0.12,0.75);
+  const hit=Math.random()<chance; if(!hit) to.add(rv(3.5));
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1,4),new THREE.MeshBasicMaterial({color:0xfff2a8,transparent:true,opacity:0.9})); tr.position.copy(from).lerp(to,0.5); tr.scale.y=d; tr.quaternion.setFromUnitVectors(_UP,to.clone().sub(from).normalize()); scene.add(tr);
+  setTimeout(()=>{ scene.remove(tr); tr.geometry.dispose(); },70); c.flash.visible=true; c.flashT=0.06;
+  if(AU.ctx){ noiseHit(0.09,3200,0.3,'bandpass'); blip(180,0.06,'square',0.06,60); }
+  if(hit) hurt(11,'HIT!'); }
+function launchDrone(c){ const d=makeDrone(); d.pos.copy(c.pos).setY(c.y+2.2); d.g.position.copy(d.pos); d.life=8; d.daze=0; d.target=lastKnown?lastKnown.clone():P.pos.clone(); d.alerted=false; PDRONES.push(d); blip(900,0.08,'square',0.05,1400); }
+function sprayBurst(){   // paint shot: dazes cops/drones in a cone in front of you
+  if(P.cans<1||(P.sprayCd||0)>0||P.knock>0) return; P.sprayCd=0.45; P.cans-=1;
+  const f=new V3(Math.sin(P.facing),0,Math.cos(P.facing)), o=P.pos.clone().setY(P.pos.y+1.3); let hits=0;
+  for(let i=0;i<26;i++) emit(o.clone(),f.clone().multiplyScalar(13+Math.random()*6).add(rv(5)),[0xff3d8b,0x3fd4ff,0xd9e84b][i%3],0.5,0.3,2);
+  const inCone=p=>{ const d=p.clone().sub(o); const L=d.length(); if(L>8) return false; d.y*=0.5; return d.normalize().dot(f)>0.62; };
+  for(const c of COPS) if(c.daze<=0&&inCone(c.pos.clone().setY(c.y+1.5))){ c.daze=5+Math.random()*5; c.see=false; c.wander=null; hits++; }
+  for(const d of PDRONES) if(d.daze<=0&&inCone(d.pos)){ d.daze=6+Math.random()*4; hits++; }
+  if(hits){ trick(hits>1?'Paint Blast x'+hits:'Paint Shot',90*hits); popup('DAZED!'); if(!COPS.some(c=>c.daze<=0&&c.see)) lastKnown=null; }   // paint in their eyes: they lose your trail
+  noiseHit(0.25,5200,0.18,'highpass'); }
+window.__police={COPS,PDRONES,get heat(){ return heat; },set heat(v){ heat=v; },get evade(){ return evadeT; },get spot(){ return spotT; },get last(){ return lastKnown; },sprayBurst,hurt};
+function updatePolice(dt){
+  P.sprayCd=Math.max(0,(P.sprayCd||0)-dt); P.hurtT=(P.hurtT||0)+dt; if(P.hurtT>6&&P.hp<100) P.hp=Math.min(100,P.hp+6*dt);
+  const want=heat>0?Math.min(8,Math.round(heat*1.6)):0;
+  if(heat>0&&!lastKnown&&(P.dispatchT=(P.dispatchT||0)-dt)<=0){ P.dispatchT=7; P.dispatch=P.pos.clone().add(new V3((Math.random()-0.5)*24,0,(Math.random()-0.5)*24)); }   // dispatch knows the rough area
+  copSpawnT-=dt; if(COPS.filter(c=>!c.leave).length<want&&copSpawnT<=0){ const sp=copSpawnPoint(); copSpawnT=sp?1.2:0.25; if(sp){ const c=makeCop(); c.pos.copy(sp); c.g.position.copy(sp); COPS.push(c); } }
+  if(heat===0) for(const c of COPS) c.leave=true;
+  let seen=false, nearest=1e9;
+  for(let i=COPS.length-1;i>=0;i--){ const c=COPS[i]; if(!c) continue; const g=c.g;   /* (a bust mid-loop clears the list) */ c.shootCd-=dt; c.droneCd-=dt; c.losT-=dt; if(c.flashT>0&&(c.flashT-=dt)<=0) c.flash.visible=false;
+    const dx=P.pos.x-c.pos.x, dz=P.pos.z-c.pos.z, dist=Math.hypot(dx,dz);
+    if(c.leave){ c.daze=0; c.stars.visible=false; if(dist>70||(c.gone=(c.gone||0)+dt)>6){ scene.remove(g); COPS.splice(i,1); continue; } }
+    if(c.daze>0){ c.daze-=dt; c.see=false; c.stars.visible=true; c.stars.rotation.y+=dt*5; g.rotation.y+=dt*2.5; c.armL.rotation.x=c.armR.rotation.x=-2.6+Math.sin(clock*8)*0.3; c.legL.rotation.x=c.legR.rotation.x=0; if(c.daze<=0){ c.stars.visible=false; c.wander=null; } continue; }
+    c.stars.visible=false; if(!c.leave) nearest=Math.min(nearest,dist);
+    if(c.losT<=0){ c.losT=0.3; c.see=!c.leave&&copSees(c); }
+    if(c.see){ seen=true; lastKnown=P.pos.clone(); }
+    let tgt=c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.see?P.pos:(lastKnown||(heat>0?P.dispatch:null));
+    if(!tgt||(!c.see&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
+    if(c.detour){ if((c.detourT-=dt)<=0||c.detour.distanceTo(c.pos)<1.5) c.detour=null; else tgt=c.detour; }
+    const tx=tgt.x-c.pos.x, tz=tgt.z-c.pos.z, tl=Math.hypot(tx,tz)||1, spd=c.see?(dist>16?8.2:6.5):c.leave?4:6;
+    // steering: the straight line first, then fanned angles round whatever is in the way
+    let mx=0, mz=0; const a0=Math.atan2(tx,tz), side=(i%2?1:-1);
+    for(const off of [0,0.6*side,-0.6*side,1.2*side,-1.2*side,1.75*side,-1.75*side]){ const a=a0+off, sx=Math.sin(a)*spd*dt, sz=Math.cos(a)*spd*dt; if(!blocked(c.pos.x+sx,c.pos.z+sz,c.y)){ mx=sx; mz=sz; break; } }
+    const prog=(mx*tx+mz*tz)/tl; c.stuckT=prog<spd*dt*0.25?(c.stuckT||0)+dt:0;
+    if(c.stuckT>0.9&&!c.detour){ const pa=a0+side*(Math.PI/2)*(Math.random()<0.7?1:-1), r=10+Math.random()*10; c.detour=c.pos.clone().add(new V3(Math.sin(pa)*r+Math.sin(a0)*6,0,Math.cos(pa)*r+Math.cos(a0)*6)); c.detourT=3; c.stuckT=0; }
+    c.pos.x+=mx; c.pos.z+=mz; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; g.position.set(c.pos.x,c.y,c.pos.z);
+    const moving=Math.hypot(mx,mz)/dt; if(moving>0.3) c.yaw+=angDiff(c.yaw,Math.atan2(mx,mz))*Math.min(1,dt*8); if(c.see) c.yaw+=angDiff(c.yaw,Math.atan2(dx,dz))*Math.min(1,dt*6);
+    g.rotation.y=c.yaw; c.walk+=moving*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,moving/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armL.rotation.x=-sw*0.8;
+    c.armR.rotation.x=c.see&&dist<26?-1.45:sw*0.8;                                                               // gun arm up when they have you
+    if(c.see&&dist<26&&c.shootCd<=0){ c.shootCd=1.25+Math.random()*0.9; shoot(c); }
+    if(dist<1.3&&Math.abs(P.pos.y-c.y)<1.3&&P.invuln<=0&&P.knock<=0){ hurt(18,'TACKLED!'); if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(dx/dist*7,4,dz/dist*7); }
+    if(!c.see&&!c.leave&&lastKnown&&c.droneCd<=0&&PDRONES.length<Math.ceil(heat/2)){ c.droneCd=14+Math.random()*6; launchDrone(c); }
+  }
+  for(let i=PDRONES.length-1;i>=0;i--){ const d=PDRONES[i]; if(!d) continue; d.life-=dt;
+    if(d.daze>0){ d.daze-=dt; d.pos.y=Math.max(ground(d.pos.x,d.pos.z,99).h+0.6,d.pos.y-6*dt); d.g.rotation.y+=dt*9; d.g.position.copy(d.pos); d.cone.visible=false; if(d.daze<=0) d.life=0; }
+    else { const to=(d.alerted&&seen?P.pos:d.target).clone(); to.y=Math.max(ground(to.x,to.z,99).h+6,P.pos.y+5); const v=to.sub(d.pos), L=v.length(); d.pos.addScaledVector(v.normalize(),Math.min(L,13*dt));
+      d.g.position.copy(d.pos); d.g.position.y+=Math.sin(clock*3+i)*0.15; d.g.rotation.y+=dt*1.2; d.siren.material=Math.floor(clock*5)%2?droneRed:droneBlue; d.cone.visible=true;
+      const pd=d.pos.distanceTo(P.pos); if(pd<21&&eyeLine(d.pos,P.pos.clone().setY(P.pos.y+1.2))){ seen=true; lastKnown=P.pos.clone(); if(!d.alerted){ d.alerted=true; if(alertMsgT<=0){ popup('DRONE SPOTTED YOU!','bad'); alertMsgT=4; } blip(1200,0.1,'square',0.06,800); } }
+      if(pd<1.6&&!P.grounded&&!P.grind&&P.vel.y<0&&P.pos.y+0.4>d.pos.y-0.3){ d.daze=4; P.vel.y=CFG.JUMP*0.9; trick('Drone Stomp',300); sfx.stomp(); for(let k=0;k<24;k++) emit(d.pos,rv(9),k%2?0xe8ecf4:0xff2244,0.7,0.25,10); } }
+    if(d.life<=0){ scene.remove(d.g); PDRONES.splice(i,1); } }
+  alertMsgT-=dt;
+  // wanted stars: stay unseen (or far away) to shed them, one every 5s
+  P.heatGrace=Math.max(0,(P.heatGrace||0)-dt);
+  if(seen){ spotT=1.2; evadeT=0; P.heatGrace=0; } else { spotT-=dt; if(heat>0&&P.heatGrace<=0){ evadeT+=dt*(nearest>50?2:1); if(evadeT>=5){ evadeT=0; heat--; popup(heat?'LOST A STAR':'EVADED!','big'); blip(700,0.1,'triangle',0.08,1050); if(!heat){ lastKnown=null; message('EVADED',1.6); } } } }
+}
 // ====================================================================== AUDIO: SFX + DYNAMIC MUSIC (layers follow Style Flow)
 const AU={ctx:null,music:true};
 const MUSIC_LV=[ {drums:1,perc:0,bass:0.7,keys:0,lead:0,cut:4500}, {drums:1,perc:1,bass:1,keys:0,lead:0,cut:9000},
@@ -2185,7 +2297,7 @@ function rumble(strong,weak,ms){ const gp=pad.raw; if(!rumbleOn||!gp) return; co
   try{ if(va&&va.playEffect) va.playEffect(va.type||'dual-rumble',{duration:ms,strongMagnitude:strong,weakMagnitude:weak}).catch(()=>{}); }catch(e){} }
 function refreshPadHelp(){
   const g=GLYPH[pad.kind]||GLYPH.xbox, el=document.getElementById('padhelp'), ed=document.getElementById('edpadhelp');
-  if(el) el.textContent=`${g.jump} jump · IN AIR: ${g.jump} flip · ${g.trick} spin · ${g.grab} grab · ${g.top} kick · press two together = combo tricks · hold ${g.aim} aim at a marker · hold ${g.spray} spray · ${g.brake} or pull back = powerslide (Ink Dash in air) · ${g.boost} boost · ${g.mod} in air = double flips · ${g.drift} drift · ${g.cam}${pad.kind==='ps'?' / touchpad':''} recenter · ${g.pause} pause · ${pad.kind==='ps'?'CREATE':'VIEW'} camera distance · d-pad / R-stick = tag gestures`;
+  if(el) el.textContent=`${g.jump} jump · IN AIR: ${g.jump} flip · ${g.trick} spin · ${g.grab} grab · ${g.top} kick · press two together = combo tricks · hold ${g.aim} aim at a marker · hold ${g.spray} spray · tap ${g.spray} away from walls = paint shot (dazes cops) · ${g.brake} or pull back = powerslide (Ink Dash in air) · ${g.boost} boost · ${g.mod} in air = double flips · ${g.drift} drift · ${g.cam}${pad.kind==='ps'?' / touchpad':''} recenter · ${g.pause} pause · ${pad.kind==='ps'?'CREATE':'VIEW'} camera distance · d-pad / R-stick = tag gestures`;
   if(ed) ed.textContent=`${pad.kind==='ps'?'Controller':'Gamepad'}: right stick moves the nozzle, ${g.boost} or ${g.jump} paints, ${g.mod}/${g.magnet} brush, ${g.ability} colour, ${g.grab} undo, ${g.pause} save, ${g.trick} cancel.`;
 }
 addEventListener('gamepadconnected',e=>{ const k=padKind(e.gamepad); pad.kind=k; refreshPadHelp();
@@ -2199,7 +2311,7 @@ let saveT=8, state='title', paused=false, score=0, runTime=0, tagsDone=0, bestCo
 const SET={assist:false};
 try{ crew=localStorage.getItem('inkline_crew')||crew; SET.assist=localStorage.getItem('inkline_assist')==='1'; }catch(e){}
 $('crew').value=crew;
-const P={ pos:new V3(...D.spawn), vel:new V3(), grounded:true, groundVy:0, gs:null, facing:Math.PI, grind:null, noGrind:0, noSame:0, lastRail:null,
+const P={ hp:100, hurtT:9, checkpoint:null, pos:new V3(...D.spawn), vel:new V3(), grounded:true, groundVy:0, gs:null, facing:Math.PI, grind:null, noGrind:0, noSame:0, lastRail:null,
   qpAir:null, airTime:0, trick:null, knock:0, invuln:0, boost:60, cans:5, crouch:0, stride:0, turn:0, grindCd:0, sideStance:0, sprayTarget:null,
   wall:null, noWall:0, lastWall:null, lastWallEnd:-9, lastGrindEnd:-9, landWin:0, landTried:false, dashUsed:false, driftT:0, branchCd:0, squash:0, jumpT:-9, flipRail:null, stance:1, stag:0, swapT:0 };
 const C={pts:0,mult:0,timer:0,list:[]};
@@ -2319,8 +2431,9 @@ function completeTag(t){
   if(t.mural){ trick('MURAL!',2500); flowAdd(40); message('MURAL COMPLETE',2.4); } else { trick('TAG!',400); flowAdd(18); }
   if(SK.onEvent) SK.onEvent('tag');
   sfx.tag();
-  const newHeat=Math.min(4,Math.floor(tagsDone/3));
-  if(newHeat>heat){ heat=newHeat; message(`HEAT ${'★'.repeat(heat)}<br><span style="font-size:22px">DRONES INBOUND</span>`,2.4); sfx.alarm(); }
+  P.heatGrace=12; if(heat<5){ heat++; evadeT=0; message(`WANTED ${'★'.repeat(heat)}<br><span style="font-size:22px">${heat===1?'THE COPS ARE ON THEIR WAY':'MORE COPS INBOUND'}</span>`,2.2); sfx.alarm(); }
+  lastKnown=P.pos.clone();   // a fresh tag gives your spot away
+  { const cx=t.pos.x+t.n.x*2.2, cz=t.pos.z+t.n.z*2.2; P.checkpoint=new V3(cx,ground(cx,cz,t.pos.y).h+0.05,cz); }   // every tag is a checkpoint
   tagsByDistrict[DKEY]=tagSpots.map((s,i)=>s.done?i:-1).filter(i=>i>=0);
   mpSend({t:'tag',d:DKEY,i:tagSpots.indexOf(t)}); saveRun();
   if(tagSpots.every(s=>s.done)){
@@ -2664,6 +2777,7 @@ function update(dt){
   P.sprayTarget=near;
   if(near&&near.needRelease&&!held('spray')) near.needRelease=false;   // shake the can: let go of spray between layers
   GEST.active=!!(near&&held('spray')&&!near.needRelease&&P.cans>=tagCost(near)&&P.knock<=0);
+  if(pressed.has('spray')&&!near) sprayBurst();   // not at a wall: spray is a paint shot that dazes cops and drones
   if(GEST.active){
     for(const [a,d] of [['cu','up'],['cr','right'],['cd','down'],['cl','left']]) if(pressed.has(a)) gestureInput(d);
     rightStickGesture();
@@ -2703,21 +2817,7 @@ function update(dt){
   }
   // drones
   updateTraffic(dt); boundsCheck(dt);
-  while(drones.length<heat){ const d=makeDrone(); placeDrone(d); drones.push(d); }
-  for(const d of drones){
-    if(!d.alive){ d.respawn-=dt; if(d.respawn<=0) placeDrone(d); continue; }
-    const to=P.pos.clone().add(new V3(0,1.2,0)).sub(d.pos); const dist=to.length();
-    d.pos.addScaledVector(to.normalize(),Math.min(dist,(9.5+heat*0.9)*dt));
-    d.pos.y=Math.max(d.pos.y,ground(d.pos.x,d.pos.z,99).h+1.2);
-    d.g.position.copy(d.pos); d.g.position.y+=Math.sin(performance.now()/300+d.pos.x)*0.15;
-    d.g.lookAt(P.pos.x,P.pos.y+1,P.pos.z);
-    d.siren.material=Math.floor(performance.now()/180)%2?droneRed:droneBlue;
-    if(d.pos.distanceTo(tmp)<1.5){
-      if(!P.grounded&&!P.grind&&!P.wall&&P.vel.y<0&&P.pos.y+0.4>d.pos.y-0.3){ d.alive=false; d.g.visible=false; d.respawn=12; P.vel.y=CFG.JUMP*0.9; trick('Drone Stomp',300); sfx.stomp();
-        for(let i=0;i<24;i++) emit(d.pos,rv(9),i%2?0xe8ecf4:0xff2244,0.7,0.25,10); }
-      else if(P.invuln<=0&&P.knock<=0){ if(P.grind) endGrind(); bail(); P.invuln=2.5; P.cans=Math.max(0,P.cans-2); popup('-2 CANS','bad'); d.pos.addScaledVector(d.pos.clone().sub(P.pos).setY(0).normalize(),6); d.pos.y+=3; }
-    }
-  }
+  updatePolice(dt);
 }
 
 // ====================================================================== VISUALS / CAMERA
@@ -2908,7 +3008,9 @@ function updateHUD(){ updateLock();
   setText('score',score.toLocaleString());
   setText('timer',fmtTime(runTime));
   setText('tagc',`${tagSpots.filter(s=>s.done).length}/${tagSpots.length} · CITY ${tagsDone}/${TOTAL_TAGS}`); setText('canc',String(P.cans));
-  setText('heat',heat?'★'.repeat(heat)+'☆'.repeat(4-heat):'');
+  setText('heat',heat?'★'.repeat(heat)+'☆'.repeat(5-heat):'');
+  $('hpfill').style.width=P.hp+'%';
+  { const el=$('wantedinfo'), seenNow=spotT>0; const t=heat?(seenNow?'SPOTTED!':P.heatGrace>0?'COPS SEARCHING…':`HIDING · ${Math.max(0,5-evadeT).toFixed(1)}s`):''; if(el.textContent!==t) el.textContent=t; el.className=heat?(seenNow?'seen':'hidden2'):''; }
   $('boostfill').style.width=P.boost+'%';
   $('flowfill').style.width=FLOW.v+'%'; $('flowfill').style.background=FLOW.col[FLOW.state];
   setText('flowname',FLOW.names[FLOW.state]); setText('flowmult','×'+FLOW.mult[FLOW.state]);
@@ -2930,7 +3032,8 @@ function updateHUD(){ updateLock();
   else ptr.style.display='none';
   const g=mapCtx; g.drawImage(mapBg,0,0);
   for(const s of tagSpots){ g.fillStyle=s.done?'#d9e84b':'#e94b42'; g.beginPath(); g.arc(mx(s.pos.x),mz(s.pos.z),s.done?3:(s.mural?7:4.5),0,7); g.fill(); if(!s.done){ g.strokeStyle='#fff'; g.lineWidth=1.5; g.stroke(); } }
-  for(const d of drones) if(d.alive){ g.fillStyle='#ff2244'; g.fillRect(mx(d.pos.x)-3,mz(d.pos.z)-3,6,6); }
+  for(const c of COPS){ g.fillStyle=c.daze>0?'#ffe23a':'#2266ff'; g.beginPath(); g.arc(mx(c.pos.x),mz(c.pos.z),3.5,0,7); g.fill(); }
+  for(const d of PDRONES){ g.fillStyle='#ff2244'; g.fillRect(mx(d.pos.x)-3,mz(d.pos.z)-3,6,6); }
   for(const p of MP.peers.values()) if(p.g.visible){ g.fillStyle='#d9e84b'; g.strokeStyle='#1b1724'; g.lineWidth=2; g.beginPath(); g.arc(mx(p.g.position.x),mz(p.g.position.z),4.5,0,7); g.fill(); g.stroke(); }
   g.save(); g.translate(mx(P.pos.x),mz(P.pos.z)); g.rotate(-P.facing+Math.PI); g.fillStyle='#fff'; g.strokeStyle='#111'; g.lineWidth=2;
   g.beginPath(); g.moveTo(0,-7); g.lineTo(5,5); g.lineTo(0,2); g.lineTo(-5,5); g.closePath(); g.stroke(); g.fill(); g.restore();
@@ -3087,7 +3190,7 @@ function arriveFrom(tr){
   if(secrets.includes(DKEY)){ golden.active=false; golden.m.visible=false; golden.t=1e9; }
   const g=tr.cont?null:(GATES.find(x=>x.to===tr.from)||GATES[0]);   // a continued save starts at the district spawn
   const sp=Math.min(26,tr.speed||12);
-  if(g){ P.pos.copy(g.p).addScaledVector(g.o,26); P.pos.y=0; P.vel.set(g.n.x*sp,0,g.n.z*sp); P.facing=Math.atan2(g.n.x,g.n.z); cam.yaw=Math.atan2(-g.n.x,-g.n.z); P.grounded=true;
+  if(g){ P.pos.copy(g.p).addScaledVector(g.o,26); P.checkpoint=P.pos.clone(); P.pos.y=0; P.vel.set(g.n.x*sp,0,g.n.z*sp); P.facing=Math.atan2(g.n.x,g.n.z); cam.yaw=Math.atan2(-g.n.x,-g.n.z); P.grounded=true;
     camera.position.copy(P.pos).addScaledVector(g.o,7).add(new V3(0,3,0)); cam.y=P.pos.y+1.5; }
 }
 function finishArrival(){ const tn=$('tunnel'); tn.classList.add('tunnel-out'); document.documentElement.classList.remove('traveling'); setTimeout(()=>{ tn.classList.add('hidden'); tn.style.display=''; },650);
@@ -3105,7 +3208,7 @@ function startGame(tr){
   try{ localStorage.setItem('inkline_crew',crew); }catch(e){}
   initAudio(); if(AU.ctx.state==='suspended') AU.ctx.resume();
   $('title').classList.add('hidden'); $('hud').classList.remove('hidden');
-  state='play'; cam.yaw=0; camera.position.set(D.spawn[0],4,D.spawn[2]+8);
+  state='play'; cam.yaw=0; camera.position.set(D.spawn[0],4,D.spawn[2]+8); P.hp=100; P.checkpoint=null; clearPolice();
   if(tr&&tr.score!==undefined){ arriveFrom(tr); message(`${D.name}<br><span style='font-size:22px'>${tagSpots.filter(s=>s.done).length}/${tagSpots.length} TAGGED · CITY ${tagsDone}/${TOTAL_TAGS}</span>`,2.6); }
   else { tagsByDistrict={}; secrets=[]; try{ sessionStorage.removeItem('jsr_travel'); }catch(e){}
     message(`${D.name}<br><span style='font-size:22px'>CLAIM THE CITY: ${TOTAL_TAGS} TAGS · TUNNELS LINK THE DISTRICTS</span>`,3); }
@@ -3297,7 +3400,7 @@ $('district').onclick=switchDistrict; $('nextd').onclick=switchDistrict;
 const TIPS={ start:'Skate to the pink arrows and TAG them · the pointer shows the nearest one', tag:'Hold E / RMB / X, then FLICK the arrows shown (mouse, arrow keys, right stick)',
   grind:'JUMP onto a rail to GRIND · SPACE again to hop off', wall:'JUMP while skating alongside a wall to WALL RIDE',
   boost:'Hold SHIFT / RT to BOOST · grinding fills it · grind long for a 2x GRIND RUSH', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
-  flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'DRONES! Stomp them from above or outrun them', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
+  flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'COPS! Spray them (E / RB) to daze them · stomp drones · break line of sight to lose stars', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
 let tipSeen={}; try{ tipSeen=JSON.parse(localStorage.getItem('inkline_tips')||'{}')||{}; }catch(e){}
 let tipT=0, tipQ=[], tipCheck=0;
 function tip(k){ if(tipSeen[k]||tipQ.includes(TIPS[k])) return; tipSeen[k]=1; try{ localStorage.setItem('inkline_tips',JSON.stringify(tipSeen)); }catch(e){} tipQ.push(TIPS[k]); }
@@ -3342,6 +3445,7 @@ function frame(now){
   post.render();
 }
 requestAnimationFrame(frame);
+window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); } };   // debug: advance the simulation without waiting for frames
 window.__game={COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
