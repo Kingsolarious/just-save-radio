@@ -38,6 +38,12 @@
   #hp { position:absolute; left:18px; bottom:104px; height:18px; width:200px; border:3px solid #fff; background:#111; transform:skewX(-14deg); box-shadow:4px 4px 0 var(--cyan); }
   #hpfill { height:100%; width:100%; background:linear-gradient(90deg,#e94b42,#ff8a7a); transition:width .15s; }
   #hp span { position:absolute; left:8px; top:0; font-size:11px; color:#111; text-shadow:0 0 2px #fff; }
+  #bossbar { position:absolute; left:50%; top:46px; transform:translateX(-50%); width:min(520px,70vw); text-align:center; }
+  #bossbar b { display:block; font-size:18px; color:#ff3d5a; text-shadow:2px 2px 0 #111; letter-spacing:2px; }
+  #bossbar div { position:relative; height:16px; border:3px solid #fff; background:#111; transform:skewX(-14deg); box-shadow:4px 4px 0 #ff3d5a; margin:4px 0; }
+  #bossfill { position:absolute; left:0; top:0; bottom:0; width:100%; background:linear-gradient(90deg,#ff3d5a,#ff9a5a); transition:width .2s; }
+  #bossarmor { position:absolute; left:0; top:0; bottom:0; width:100%; background:repeating-linear-gradient(90deg,#9fb4d8 0 30%,transparent 30% 33.3%); opacity:.55; transition:width .2s; }
+  #bossbar small { font-size:12px; text-shadow:2px 2px 0 #111; letter-spacing:1px; }
   #wantedinfo { position:absolute; right:18px; top:100px; font-size:13px; text-align:right; text-shadow:2px 2px 0 #111; letter-spacing:1px; }
   #wantedinfo.seen { color:#ff3d5a; } #wantedinfo.hidden2 { color:#7ff3ff; }
   #hurt { position:absolute; inset:0; pointer-events:none; opacity:0; background:radial-gradient(circle at 50% 50%, transparent 45%, rgba(233,30,50,.55)); transition:opacity .25s; zoom:1 !important; }
@@ -136,6 +142,7 @@
   <div id="boost"><div id="boostfill"></div><span>BOOST</span></div>
   <div id="hp"><div id="hpfill"></div><span>HEALTH</span></div>
   <div id="wantedinfo"></div>
+  <div id="bossbar" class="hidden"><b id="bossname">BOSS</b><div><i id="bossfill"></i><s id="bossarmor"></s></div><small id="bossinfo"></small></div>
   <div id="hurt"></div>
   <div id="flow"><div id="flowfill"></div><span id="flowname">CRUISING</span><b id="flowmult">×1</b></div>
   <div id="combo"><div id="combo-list"></div><div id="combo-pts"></div><div id="combobar"><div id="combobarfill"></div></div></div>
@@ -2068,7 +2075,8 @@ function makeDrone(){
 const COPS=[], PDRONES=[]; let lastKnown=null, evadeT=0, spotT=0, copSpawnT=0, alertMsgT=0;
 const COPM={ jacket:toon(0x26305a), shirt:toon(0x8fb0e8), skin:toon(0xc98b62), cap:toon(0x1b1f3a), badge:metal(0xf2c83a), boot:toon(0x15151c), star:new THREE.MeshBasicMaterial({color:0xffe23a}) };
 function limb(w,h,d,mat,y){ const piv=new THREE.Group(); piv.position.y=y; const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.y=-h/2; outline(m,0.03); piv.add(m); return piv; }
-function makeCop(){ const g=new THREE.Group();
+const COPV={ minion:{ jacket:toon(0x4a3f7a), shirt:toon(0x2a2440), cap:toon(0x15131f) }, boss:{ jacket:toon(0x8a1c2a), shirt:toon(0xf4efe3), cap:toon(0x2a1012) } };
+function makeCop(kind){ const V=COPV[kind]||{}; const g=new THREE.Group(); const COPM_=COPM; { /* per-variant materials */ }
   const legL=limb(0.24,0.92,0.26,COPM.jacket,0.95), legR=limb(0.24,0.92,0.26,COPM.jacket,0.95); legL.position.x=-0.15; legR.position.x=0.15; g.add(legL,legR);
   for(const L of [legL,legR]){ const b=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.14,0.36),COPM.boot); b.position.set(0,-0.87,0.05); L.add(b); }
   const torso=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.78,0.36),COPM.jacket); torso.position.y=1.36; outline(torso,0.04); g.add(torso);
@@ -2080,7 +2088,12 @@ function makeCop(){ const g=new THREE.Group();
   const brim=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.04,0.18),COPM.cap); brim.position.set(0,2.08,0.2); g.add(brim);
   const stars=new THREE.Group(); stars.position.y=2.5; stars.visible=false; for(let k=0;k<3;k++){ const st=new THREE.Mesh(new THREE.OctahedronGeometry(0.11),COPM.star); const a=k/3*Math.PI*2; st.position.set(Math.cos(a)*0.4,0,Math.sin(a)*0.4); stars.add(st); } g.add(stars);
   const flash=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6),new THREE.MeshBasicMaterial({color:0xfff2a8})); flash.position.set(0,-0.72,0.12); flash.visible=false; armR.add(flash);
-  scene.add(g); return {g,legL,legR,armL,armR,stars,flash,pos:new V3(),y:0,yaw:0,daze:0,see:false,losT:0,shootCd:2.5,droneCd:5,wander:null,walk:0,leave:false,flashT:0};
+  if(kind){ g.traverse(o=>{ if(!o.isMesh||o.userData.isOutline) return; if(o.material===COPM.jacket) o.material=V.jacket; else if(o.material===COPM.shirt) o.material=V.shirt; else if(o.material===COPM.cap) o.material=V.cap; });
+    if(kind==='minion'){ const visor=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.12,0.06),new THREE.MeshBasicMaterial({color:0x7ff3ff})); visor.position.set(0,1.99,0.2); g.add(visor);
+      const shield=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.9,0.06),toon(0x9fb4d8)); shield.position.set(0,-0.35,0.22); outline(shield,0.03); armL.add(shield); }
+    if(kind==='boss'){ g.scale.setScalar(1.55); const crest=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.3,4),COPM.badge); crest.position.set(0,2.32,0.12); g.add(crest);
+      const light=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,6),droneRed); light.position.set(0,2.24,0); g.add(light); } }
+  scene.add(g); return {g,legL,legR,armL,armR,stars,flash,kind:kind||null,pos:new V3(),y:0,yaw:0,daze:0,see:false,losT:0,shootCd:2.5,droneCd:5,wander:null,walk:0,leave:false,flashT:0};
 }
 function eyeLine(a,b){ const d=b.clone().sub(a), L=d.length(), n=Math.max(2,Math.ceil(L/1.8)), q=new V3();
   for(let i=1;i<n;i++){ q.copy(a).addScaledVector(d,i/n);
@@ -2101,7 +2114,7 @@ function hurt(n,why){ if(P.invuln>0||state!=='play') return; P.hp=Math.max(0,P.h
   blip(140,0.12,'sawtooth',0.12,70); if(why) popup(why,'bad'); if(P.hp<=0) busted(); }
 function busted(){ message('BUSTED!<br><span style="font-size:22px">BACK TO YOUR LAST CHECKPOINT</span>',2.4); sfx.alarm&&sfx.alarm();
   if(P.grind) endGrind(); if(P.wall) endWall(); dropCombo(); P.cans=Math.max(0,P.cans-3); heat=0; evadeT=0; lastKnown=null; clearPolice();
-  const cp=P.checkpoint||new V3(...D.spawn); P.pos.copy(cp); P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.hp=100; P.invuln=3; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); saveRun(); }
+  const wasBoss=BOSS.active; const cp=(wasBoss&&P.bossCp)||P.checkpoint||new V3(...D.spawn); P.pos.copy(cp); if(wasBoss) bossReset(); P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.hp=100; P.invuln=3; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); saveRun(); }
 function clearPolice(){ for(const c of COPS) scene.remove(c.g); COPS.length=0; for(const d of PDRONES) scene.remove(d.g); PDRONES.length=0; }
 function shoot(c){ const from=c.pos.clone().setY(c.y+1.45), to=P.pos.clone().setY(P.pos.y+1.1), hs=Math.hypot(P.vel.x,P.vel.z), d=from.distanceTo(to);
   let chance=0.72-hs*0.024-(P.grind?0.14:0)-(!P.grounded&&!P.grind?0.12:0); if(d<10) chance+=0.12; chance=clamp(chance,0.12,0.75);
@@ -2116,26 +2129,60 @@ function sprayBurst(){   // paint shot: dazes cops/drones in a cone in front of 
   const f=new V3(Math.sin(P.facing),0,Math.cos(P.facing)), o=P.pos.clone().setY(P.pos.y+1.3); let hits=0;
   for(let i=0;i<26;i++) emit(o.clone(),f.clone().multiplyScalar(13+Math.random()*6).add(rv(5)),[0xff3d8b,0x3fd4ff,0xd9e84b][i%3],0.5,0.3,2);
   const inCone=p=>{ const d=p.clone().sub(o); const L=d.length(); if(L>8) return false; d.y*=0.5; return d.normalize().dot(f)>0.62; };
-  for(const c of COPS) if(c.daze<=0&&inCone(c.pos.clone().setY(c.y+1.5))){ c.daze=5+Math.random()*5; c.see=false; c.wander=null; hits++; }
+  for(const c of COPS){ if(!inCone(c.pos.clone().setY(c.y+1.5*(c.kind==='boss'?1.55:1)))) continue; hits++;
+    if(c.kind){ if(c.daze>0) bossDamage(c,1,'PAINTED'); else if(c.kind==='minion'){ c.daze=4; popup('STUNNED!'); } else { c.armor--; popup(c.armor>0?`ARMOR ${c.armor}`:'ARMOR CRACKED!','big'); if(c.armor<=0){ c.daze=4.5; c.armor=3; } } }
+    else if(c.daze<=0){ c.daze=5+Math.random()*5; c.see=false; c.wander=null; } }
   for(const d of PDRONES) if(d.daze<=0&&inCone(d.pos)){ d.daze=6+Math.random()*4; hits++; }
   if(hits){ trick(hits>1?'Paint Blast x'+hits:'Paint Shot',90*hits); popup('DAZED!'); if(!COPS.some(c=>c.daze<=0&&c.see)) lastKnown=null; }   // paint in their eyes: they lose your trail
   noiseHit(0.25,5200,0.18,'highpass'); }
-window.__police={COPS,PDRONES,get heat(){ return heat; },set heat(v){ heat=v; },get evade(){ return evadeT; },get spot(){ return spotT; },get last(){ return lastKnown; },sprayBurst,hurt};
+window.__police={get BOSS(){ return BOSS; },startBoss:()=>startBoss(),get beaten(){ return bossesBeaten; },COPS,PDRONES,get heat(){ return heat; },set heat(v){ heat=v; },get evade(){ return evadeT; },get spot(){ return spotT; },get last(){ return lastKnown; },sprayBurst,hurt};
+// ---------------------------------------------------------------- BOSS BATTLES: claim every tag in a district and the boss shows up with riot minions
+const BOSSES={ harbor:'CHIEF HARBORMASTER', yards:'SGT. SLEDGE', pier:'CAPTAIN CARNIVAL' };
+const BOSS={ active:false, boss:null, minions:0, startHeat:0 }; let bossesBeaten=[];
+function bossSpawnPoint(minD,maxD){ for(let k=0;k<120;k++){ const a=Math.random()*Math.PI*2, d=minD+Math.random()*(maxD-minD), x=P.pos.x+Math.sin(a)*d, z=P.pos.z+Math.cos(a)*d;
+    if(Math.abs(x)>EDGE-6||Math.abs(z)>EDGE-6||(D.openSouth&&z>88)) continue; const gh=ground(x,z,1).h; if(gh>0.6||blocked(x,z,gh)||insideSolid(new V3(x,gh+0.5,z))) continue; return new V3(x,gh,z); }
+  return new V3(...D.spawn); }
+function startBoss(){ if(BOSS.active||bossesBeaten.includes(DKEY)) return; clearPolice(); BOSS.active=true; heat=5;
+  P.cans=Math.min(40,P.cans+10); P.bossCp=P.checkpoint?P.checkpoint.clone():P.pos.clone();
+  const b=makeCop('boss'); b.hp=b.maxHp=12; b.armor=3; b.chargeCd=4; b.callCd=8; b.shootCd=3; b.pos.copy(bossSpawnPoint(26,40)); b.y=b.pos.y; b.g.position.copy(b.pos); COPS.push(b); BOSS.boss=b;
+  for(let i=0;i<6;i++){ const m=makeCop('minion'); m.hp=m.maxHp=2; m.shootCd=2+Math.random()*2; m.pos.copy(bossSpawnPoint(18,34)); m.y=m.pos.y; m.g.position.copy(m.pos); COPS.push(m); }
+  BOSS.minions=6; $('bossname').textContent=BOSSES[DKEY]||'THE CHIEF'; $('bossbar').classList.remove('hidden');
+  message(`BOSS BATTLE<br><span style="font-size:22px">${BOSSES[DKEY]} AND THE RIOT SQUAD · PAINT THEM TO STUN, THEN HIT THEM</span>`,3.2); sfx.alarm&&sfx.alarm(); rumble(0.6,0.9,400); updateBossHUD(); }
+function bossDamage(c,n,why){ c.hp-=n; popup(`${why} -${n}`,'big'); for(let i=0;i<20;i++) emit(c.pos.clone().setY(c.y+1.5),rv(6),[0xff3d8b,0x3fd4ff,0xd9e84b][i%3],0.6,0.3,6); rumble(0.3,0.6,120);
+  if(c.hp>0){ updateBossHUD(); return; }
+  scene.remove(c.g); COPS.splice(COPS.indexOf(c),1);
+  if(c.kind==='minion'){ BOSS.minions--; trick('Minion Down',300); for(let i=0;i<3;i++) addCan(c.pos.x+(Math.random()-0.5)*3,c.y+1,c.pos.z+(Math.random()-0.5)*3); }
+  else bossDefeated(); updateBossHUD(); }
+function bossDefeated(){ BOSS.active=false; bossesBeaten.push(DKEY); for(const c of COPS) scene.remove(c.g); COPS.length=0; for(const d of PDRONES) scene.remove(d.g); PDRONES.length=0;
+  heat=0; evadeT=0; lastKnown=null; score+=5000; trick('BOSS DOWN',2500); flowAdd(50); $('bossbar').classList.add('hidden'); sfx.secret&&sfx.secret(); rumble(0.8,1,700);
+  if(tagsDone>=TOTAL_TAGS&&bossesBeaten.length>=Object.keys(DISTRICTS).length){ message('CITY CLAIMED!',3); winTimer=2.5; }
+  else message(`DISTRICT LIBERATED!<br><span style="font-size:22px">${BOSSES[DKEY]} IS DOWN · TAKE A TUNNEL TO THE NEXT DISTRICT</span>`,3.4);
+  saveRun(); }
+function bossReset(){ if(!BOSS.active) return; BOSS.active=false; $('bossbar').classList.add('hidden'); setTimeout(()=>{ if(state==='play') startBoss(); },2600); }   // busted mid-fight: the fight restarts
+function updateBossHUD(){ const b=BOSS.boss; if(!b) return; $('bossfill').style.width=Math.max(0,b.hp/b.maxHp*100)+'%'; $('bossarmor').style.width=(b.daze>0?0:b.armor/3*100)+'%';
+  const t=(b.daze>0?'STUNNED · HIT IT NOW!':`ARMOR ${b.armor}/3 · PAINT IT TO CRACK IT`)+` · MINIONS ${BOSS.minions}`; if($('bossinfo').textContent!==t) $('bossinfo').textContent=t; }
 function updatePolice(dt){
   P.sprayCd=Math.max(0,(P.sprayCd||0)-dt); P.hurtT=(P.hurtT||0)+dt; if(P.hurtT>6&&P.hp<100) P.hp=Math.min(100,P.hp+6*dt);
   const want=heat>0?Math.min(8,Math.round(heat*1.6)):0;
   if(heat>0&&!lastKnown&&(P.dispatchT=(P.dispatchT||0)-dt)<=0){ P.dispatchT=7; P.dispatch=P.pos.clone().add(new V3((Math.random()-0.5)*24,0,(Math.random()-0.5)*24)); }   // dispatch knows the rough area
-  copSpawnT-=dt; if(COPS.filter(c=>!c.leave).length<want&&copSpawnT<=0){ const sp=copSpawnPoint(); copSpawnT=sp?1.2:0.25; if(sp){ const c=makeCop(); c.pos.copy(sp); c.g.position.copy(sp); COPS.push(c); } }
-  if(heat===0) for(const c of COPS) c.leave=true;
+  copSpawnT-=dt; if(!BOSS.active&&COPS.filter(c=>!c.leave&&!c.kind).length<want&&copSpawnT<=0){ const sp=copSpawnPoint(); copSpawnT=sp?1.2:0.25; if(sp){ const c=makeCop(); c.pos.copy(sp); c.g.position.copy(sp); COPS.push(c); } }
+  if(heat===0&&!BOSS.active) for(const c of COPS) if(!c.kind) c.leave=true;
+  if(BOSS.active){ heat=5; P.heatGrace=99; updateBossHUD(); }
   let seen=false, nearest=1e9;
   for(let i=COPS.length-1;i>=0;i--){ const c=COPS[i]; if(!c) continue; const g=c.g;   /* (a bust mid-loop clears the list) */ c.shootCd-=dt; c.droneCd-=dt; c.losT-=dt; if(c.flashT>0&&(c.flashT-=dt)<=0) c.flash.visible=false;
     const dx=P.pos.x-c.pos.x, dz=P.pos.z-c.pos.z, dist=Math.hypot(dx,dz);
     if(c.leave){ c.daze=0; c.stars.visible=false; if(dist>70||(c.gone=(c.gone||0)+dt)>6){ scene.remove(g); COPS.splice(i,1); continue; } }
+    if(c.kind&&c.daze>0&&!P.grounded&&!P.grind&&P.vel.y<0&&dist<1.6*(c.kind==='boss'?1.5:1)&&P.pos.y>c.y+1.2){ P.vel.y=CFG.JUMP*0.95; bossDamage(c,2,'STOMP!'); sfx.stomp(); continue; }   // stomp a stunned enemy
     if(c.daze>0){ c.daze-=dt; c.see=false; c.stars.visible=true; c.stars.rotation.y+=dt*5; g.rotation.y+=dt*2.5; c.armL.rotation.x=c.armR.rotation.x=-2.6+Math.sin(clock*8)*0.3; c.legL.rotation.x=c.legR.rotation.x=0; if(c.daze<=0){ c.stars.visible=false; c.wander=null; } continue; }
     c.stars.visible=false; if(!c.leave) nearest=Math.min(nearest,dist);
     if(c.losT<=0){ c.losT=0.3; c.see=!c.leave&&copSees(c); }
     if(c.see){ seen=true; lastKnown=P.pos.clone(); }
-    let tgt=c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.see?P.pos:(lastKnown||(heat>0?P.dispatch:null));
+    if(c.kind){ c.leave=false; if(c.kind==='boss'){ c.chargeCd-=dt; c.callCd-=dt;
+        if(c.charge>0){ c.charge-=dt; const cd=new V3(Math.sin(c.yaw),0,Math.cos(c.yaw)); const nx=c.pos.x+cd.x*17*dt, nz=c.pos.z+cd.z*17*dt; if(!blocked(nx,nz,c.y)){ c.pos.x=nx; c.pos.z=nz; } else c.charge=0; g.position.set(c.pos.x,c.y,c.pos.z);
+          if(dist<1.9&&Math.abs(P.pos.y-c.y)<2&&P.invuln<=0&&P.knock<=0){ hurt(26,'BODY SLAMMED!'); if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(dx/dist*10,6,dz/dist*10); c.charge=0; } continue; }
+        if(c.see&&dist<16&&dist>4&&c.chargeCd<=0){ c.chargeCd=6+Math.random()*3; c.charge=0.75; c.yaw=Math.atan2(dx,dz); popup('INCOMING!','bad'); blip(120,0.3,'sawtooth',0.1,60); continue; }
+        if(c.callCd<=0&&PDRONES.length<3){ c.callCd=14; lastKnown=P.pos.clone(); launchDrone(c); } } }
+    let tgt=c.kind?P.pos:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.see?P.pos:(lastKnown||(heat>0?P.dispatch:null));
     if(!tgt||(!c.see&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
     if(c.detour){ if((c.detourT-=dt)<=0||c.detour.distanceTo(c.pos)<1.5) c.detour=null; else tgt=c.detour; }
     const tx=tgt.x-c.pos.x, tz=tgt.z-c.pos.z, tl=Math.hypot(tx,tz)||1, spd=c.see?(dist>16?8.2:6.5):c.leave?4:6;
@@ -2148,8 +2195,8 @@ function updatePolice(dt){
     const moving=Math.hypot(mx,mz)/dt; if(moving>0.3) c.yaw+=angDiff(c.yaw,Math.atan2(mx,mz))*Math.min(1,dt*8); if(c.see) c.yaw+=angDiff(c.yaw,Math.atan2(dx,dz))*Math.min(1,dt*6);
     g.rotation.y=c.yaw; c.walk+=moving*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,moving/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armL.rotation.x=-sw*0.8;
     c.armR.rotation.x=c.see&&dist<26?-1.45:sw*0.8;                                                               // gun arm up when they have you
-    if(c.see&&dist<26&&c.shootCd<=0){ c.shootCd=1.25+Math.random()*0.9; shoot(c); }
-    if(dist<1.3&&Math.abs(P.pos.y-c.y)<1.3&&P.invuln<=0&&P.knock<=0){ hurt(18,'TACKLED!'); if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(dx/dist*7,4,dz/dist*7); }
+    if(c.see&&dist<26&&c.shootCd<=0){ if(c.kind==='boss'){ c.shootCd=2.2+Math.random(); for(let b=0;b<3;b++) setTimeout(()=>{ if(COPS.includes(c)&&c.daze<=0) shoot(c); },b*150); } else { c.shootCd=(c.kind?1.6:1.25)+Math.random()*0.9; shoot(c); } }
+    if(dist<1.3*(c.kind==='boss'?1.5:1)&&Math.abs(P.pos.y-c.y)<1.3&&P.invuln<=0&&P.knock<=0){ hurt(c.kind==='boss'?24:18,'TACKLED!'); if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(dx/dist*7,4,dz/dist*7); }
     if(!c.see&&!c.leave&&lastKnown&&c.droneCd<=0&&PDRONES.length<Math.ceil(heat/2)){ c.droneCd=14+Math.random()*6; launchDrone(c); }
   }
   for(let i=PDRONES.length-1;i>=0;i--){ const d=PDRONES[i]; if(!d) continue; d.life-=dt;
@@ -2437,7 +2484,8 @@ function completeTag(t){
   tagsByDistrict[DKEY]=tagSpots.map((s,i)=>s.done?i:-1).filter(i=>i>=0);
   mpSend({t:'tag',d:DKEY,i:tagSpots.indexOf(t)}); saveRun();
   if(tagSpots.every(s=>s.done)){
-    if(tagsDone>=TOTAL_TAGS){ message('CITY CLAIMED!',3); winTimer=2.5; }
+    if(!bossesBeaten.includes(DKEY)) setTimeout(()=>{ if(state==='play') startBoss(); },1800);              // every tag claimed: the boss comes for you
+    else if(tagsDone>=TOTAL_TAGS&&bossesBeaten.length>=Object.keys(DISTRICTS).length){ message('CITY CLAIMED!',3); winTimer=2.5; }
     else message(`DISTRICT CLAIMED!<br><span style='font-size:22px'>TAKE A TUNNEL TO THE NEXT ONE</span>`,3); }
 }
 
@@ -3175,7 +3223,7 @@ function checkGates(){
 function travelTo(to){
   traveling=true; if(P.grind) endGrind(); bankCombo();
   tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0);
-  const payload={to,from:DKEY,t:Date.now(),speed:Math.max(12,Math.hypot(P.vel.x,P.vel.z)),score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,flow:FLOW.v,bestCombo,stance:P.stance,heat};
+  const payload={to,from:DKEY,t:Date.now(),bossesBeaten,speed:Math.max(12,Math.hypot(P.vel.x,P.vel.z)),score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,flow:FLOW.v,bestCombo,stance:P.stance,heat};
   try{ sessionStorage.setItem('jsr_travel',JSON.stringify(payload)); localStorage.setItem('inkline_district',to); }catch(e){}
   saveRun(to);
   $('tname').textContent=DISTRICTS[to].name; const tn=$('tunnel'); tn.classList.remove('hidden','tunnel-out'); tn.style.display='flex';
@@ -3184,7 +3232,7 @@ function travelTo(to){
   tn.classList.add('quick'); setTimeout(()=>{ location.hash=to; location.reload(); },350);
 }
 function arriveFrom(tr){
-  score=tr.score; runTime=tr.runTime||0; tagsDone=tr.tagsDone; tagsByDistrict=tr.tagsByDistrict||{}; secrets=tr.secrets||[]; bestCombo=tr.bestCombo||0; heat=tr.heat||0;
+  score=tr.score; bossesBeaten=tr.bossesBeaten||[]; runTime=tr.runTime||0; tagsDone=tr.tagsDone; tagsByDistrict=tr.tagsByDistrict||{}; secrets=tr.secrets||[]; bestCombo=tr.bestCombo||0; heat=tr.heat||0;
   P.cans=tr.cans; P.boost=tr.boost; FLOW.v=tr.flow||0; P.stance=tr.stance||1;
   for(const i of tagsByDistrict[DKEY]||[]){ const t=tagSpots[i]; if(!t||t.done) continue; t.done=true; ensureDecal(t); t.decal.material.opacity=1; t.pop=1; t.frame.visible=false; t.arrow.visible=false; }
   if(secrets.includes(DKEY)){ golden.active=false; golden.m.visible=false; golden.t=1e9; }
@@ -3208,7 +3256,7 @@ function startGame(tr){
   try{ localStorage.setItem('inkline_crew',crew); }catch(e){}
   initAudio(); if(AU.ctx.state==='suspended') AU.ctx.resume();
   $('title').classList.add('hidden'); $('hud').classList.remove('hidden');
-  state='play'; cam.yaw=0; camera.position.set(D.spawn[0],4,D.spawn[2]+8); P.hp=100; P.checkpoint=null; clearPolice();
+  state='play'; cam.yaw=0; camera.position.set(D.spawn[0],4,D.spawn[2]+8); P.hp=100; P.checkpoint=null; clearPolice(); BOSS.active=false; $('bossbar').classList.add('hidden'); if(!tr) bossesBeaten=[];
   if(tr&&tr.score!==undefined){ arriveFrom(tr); message(`${D.name}<br><span style='font-size:22px'>${tagSpots.filter(s=>s.done).length}/${tagSpots.length} TAGGED · CITY ${tagsDone}/${TOTAL_TAGS}</span>`,2.6); }
   else { tagsByDistrict={}; secrets=[]; try{ sessionStorage.removeItem('jsr_travel'); }catch(e){}
     message(`${D.name}<br><span style='font-size:22px'>CLAIM THE CITY: ${TOTAL_TAGS} TAGS · TUNNELS LINK THE DISTRICTS</span>`,3); }
@@ -3233,7 +3281,7 @@ $('start').onclick=()=>startGame();
 const SAVE_KEY='inkline_save';
 function saveRun(district=DKEY){ if(state!=='play'||winTimer>0) return;
   try{ tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0);
-    localStorage.setItem(SAVE_KEY,JSON.stringify({district,score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,bestCombo,heat,crew,saved:Date.now()})); }catch(e){} }
+    localStorage.setItem(SAVE_KEY,JSON.stringify({district,bossesBeaten,score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,bestCombo,heat,crew,saved:Date.now()})); }catch(e){} }
 function loadSave(){ try{ const v=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); return v&&DISTRICTS[v.district]?v:null; }catch(e){ return null; } }
 function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
 { const sv=loadSave(); if(sv){ const b=$('continue'); b.classList.remove('hidden');
@@ -3319,7 +3367,7 @@ function applyCrewTag(d,i,name){
   if(d===DKEY){ const t=tagSpots[i]; if(!t||t.done) return; t.done=true; ensureDecal(t); t.decal.material.opacity=1; t.pop=0; t.frame.visible=false; t.arrow.visible=false; if(P.aimLock===t) P.aimLock=null; }
   if(list.includes(i)) return; list.push(i); tagsDone++;
   if(name){ popup(`${name} TAGGED${d===DKEY?'':' · '+(DISTRICTS[d]?.name||'')}`); }
-  if(tagsDone>=TOTAL_TAGS&&winTimer<0){ message('CITY CLAIMED!',3); winTimer=2.5; } saveRun(); }
+  if(tagsDone>=TOTAL_TAGS&&winTimer<0&&bossesBeaten.length>=Object.keys(DISTRICTS).length){ message('CITY CLAIMED!',3); winTimer=2.5; } saveRun(); }
 // ---- remote skaters: each shows the character that player picked, with a floating name tag
 const PEER_MODELS={}, PEER_LOADING={};
 function normalizeModel(src){ const box=new THREE.Box3().setFromObject(src), size=box.getSize(new V3()), k=1.95/Math.max(size.y,1e-3);
