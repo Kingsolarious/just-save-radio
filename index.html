@@ -732,7 +732,7 @@ function guard(a,b,y,color=0xffe23a,lift=0.9){ return addRail([[a[0],y+lift,a[1]
 // GRIND LIFTS: the only way up is to grind. Every climb is a rail that runs from the surface you're on up to the
 // edge of where you're going (grinding never drops below 6 m/s, so any climb makes it). Routed automatically:
 // it tries approach angles and steeper pitches until the line is clear of buildings and starts on solid footing.
-const LIFTS=[]; let LIFT_STRICT=false;
+const LIFTS=[]; let LIFT_STRICT=false, LIFT_MINRUN=0;
 function riderClear(x,z,y,R=0.7){ for(const s of solids){ if(x<=s.x0-R||x>=s.x1+R||z<=s.z0-R||z>=s.z1+R) continue; const top=topAt(s,x,z); if(top>y-0.15&&(s.bot===undefined||s.bot<y+1.75)) return false; } return true; }
 /* ---- grind lifts as city infrastructure: a painted run-up, a neon gateway that says where it goes, a girder under the rail ---- */
 const LIFTM={ beam:metal(0x3a3f4a), post:metal(0x2a2f3a) };
@@ -754,30 +754,33 @@ function launchPad(x,z,y,toH,r,col=0x7ff3ff,target=null){ const tx=target?target
   const inLane=(px,pz)=>ROADS.some(R=>R.axis==='x'?(px>R.a0&&px<R.a1&&Math.abs(pz-R.c)<RW+0.6):(pz>R.a0&&pz<R.a1&&Math.abs(px-R.c)<RW+0.6));   /* traffic lanes stay clear of lifts */
   const wallAt=(px,pz,py)=>solids.some(s=>px>s.x0&&px<s.x1&&pz>s.z0&&pz<s.z1&&(s.type==='ramp'?s.y0+s.h:s.top)>py-0.3&&(s.bot===undefined||s.bot<py+1.2));
   let best=null;
+  for(const relax of [false,true]){ if(best) break;   /* a second, looser search before ever giving up */
   for(const pass of [0,1]){ const dirs=pass===0?grid:[0.45,-0.45,0.9,-0.9,1.4,-1.4,1.9,-1.9,2.5,-2.5].map(d=>a0+d);
     for(const ang of dirs){ const dx=Math.sin(ang), dz=Math.cos(ang);
       let e=0; while(e<45&&ground(tx+dx*e,tz+dz*e,toH+0.6).h>toH-0.35) e+=0.4; if(e<0.4||e>=45) continue;      // walk out to the edge of the destination
       const ex=tx+dx*(e-0.35), ez=tz+dz*(e-0.35);
-      let deck=true; for(let q=0.3;q<=5;q+=0.5){ const qx=ex-dx*q, qz=ez-dz*q; if(Math.abs(ground(qx,qz,toH+0.6).h-toH)>0.35||!riderClear(qx,qz,toH+0.25)) { deck=false; break; } } if(!deck) continue;   /* lands on 5m of open deck */
-      for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4]){ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
+      let deck=true; for(let q=0.3;q<=(relax?2:5);q+=0.5){ const qx=ex-dx*q, qz=ez-dz*q; if(Math.abs(ground(qx,qz,toH+0.6).h-toH)>0.35||!riderClear(qx,qz,toH+0.25)) { deck=false; break; } } if(!deck) continue;   /* lands on 5m of open deck */
+      for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4].concat(relax?[3.2]:[])){ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
         if(Math.abs(sx)>EDGE-3||Math.abs(sz)>EDGE-3||(D.openSouth&&sz>90)) continue;
         if(Math.abs(ground(sx,sz,y+1.2).h-y)>0.6) continue;                                              // must start on the surface you're riding
         if(y<1&&inLane(sx,sz)) continue;
         let run=0; for(let q=1;q<=10;q++){ const qx=sx+dx*q, qz=sz+dz*q; if((y<1&&inLane(qx,qz))||Math.abs(qx)>EDGE-2||Math.abs(qz)>EDGE-2||Math.abs(ground(qx,qz,y+1.2).h-y)>0.4||!riderClear(qx,qz,y+0.3,0.6)) break; run=q; }
+        if(run<LIFT_MINRUN) continue;   /* no run-up, no lift (when there are other spots to try) */
         const sc0=Math.min(run,10)*3+(pass?0:14)-slope*4; if(best&&sc0+12<=best.sc) continue;                  // can't beat the best even with a wall to ride beside
         let ok=true; const n=Math.max(4,Math.ceil(Math.hypot(L,rise)/1.2));
-        for(let k=0;k<n&&ok;k++){ const u=k/n, px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(!riderClear(px,pz,py,u>0.8?0:0.4)||(py<5&&inLane(px,pz))) ok=false; else if(u<0.85&&rails.some(o=>{ if(o.bb&&(px<o.bb[0]-2.5||px>o.bb[1]+2.5||pz<o.bb[2]-2.5||pz>o.bb[3]+2.5)) return false; const c=railClosest(o,{x:px,y:py,z:pz}); return c.d2<6.25&&Math.abs(c.y-py)<2.5; })) ok=false; }
+        for(let k=0;k<n&&ok;k++){ const u=k/n, px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(!riderClear(px,pz,py,u>0.8?0:(relax?0.2:0.4))||(py<5&&inLane(px,pz))) ok=false; else if(!relax&&u<0.85&&rails.some(o=>{ if(o.bb&&(px<o.bb[0]-2.5||px>o.bb[1]+2.5||pz<o.bb[2]-2.5||pz>o.bb[3]+2.5)) return false; const c=railClosest(o,{x:px,y:py,z:pz}); return c.d2<6.25&&Math.abs(c.y-py)<2.5; })) ok=false; }
         if(!ok) continue;
         let hug=0; const lx=-dz, lz=dx; for(const u of [0.25,0.5,0.75]){ const px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(wallAt(px+lx*1.8,pz+lz*1.8,py)||wallAt(px-lx*1.8,pz-lz*1.8,py)) hug++; }
         const sc=sc0+hug*4;                                                                                // a rail running up a building face beats one hanging in the open
         if(!best||sc>best.sc) best={sc,dx,dz,sx,sz,ex,ez,L,run:run>=8?8:run>=4?4:0}; } }
-    if(best) break; }
+    if(best) break; } }
   if(best){ const {dx,dz,sx,sz,ex,ez,L,run}=best;
     const pts=run?[[sx+dx*2.2,y+0.32,sz+dz*2.2]]:[]; const seg=Math.max(1,Math.ceil(L/7)); for(let k=0;k<=seg;k++){ const u=k/seg; pts.push([sx+(ex-sx)*u,y+0.7+(toH+0.15-y-0.7)*u,sz+(ez-sz)*u]); }   /* a low lead-in you roll straight onto */
     pts.push([ex-dx*1.8,toH+0.15,ez-dz*1.8]);
     const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; const LF={rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez],dir:[-dx,-dz],run,col:col||0x7ff3ff,score:best.sc}; LIFTS.push(LF); liftDress(LF); return rl; }
   // nothing clear: a steep direct rail from where the vent would have been
   if(LIFT_STRICT) return null;
+  { const n=Math.ceil(Math.hypot(tx-x,tz-z,toH-y)); for(let k=1;k<n-1;k++){ const u=k/n; if(!riderClear(x+(tx-x)*u,z+(tz-z)*u,y+0.7+(toH+0.15-y-0.7)*u,0)) return null; } }   /* never a pole through a wall: no clean line, no lift */
   const pts=[[x,y+0.7,z],[tx,toH+0.15,tz]], rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[x,z],end:[tx,tz],fallback:true}); return rl; }
 // ====================================================================== MAP: HARBOR HEIGHTS (plaza district)
 function buildHarbor(){
@@ -790,7 +793,7 @@ box(-5,5,-5,5,1.0,M.fountain); box(-1.2,1.2,-1.2,1.2,5.5,M.statue);
 addRail([[-4.8,1.06,-4.8],[4.8,1.06,-4.8],[4.8,1.06,4.8],[-4.8,1.06,4.8]],{closed:true,color:0xff3d8b,radius:0.09});
 for(const [x0,x1,z0,z1,rz] of [[12,18,8,9.2,8.6],[-18,-12,8,9.2,8.6],[12,18,-9.2,-8,-8.6],[-18,-12,-9.2,-8,-8.6]]){
   box(x0,x1,z0,z1,0.55,M.bench); addRail([[x0+0.2,0.62,rz],[x1-0.2,0.62,rz]],{color:0xffffff,radius:0.07}); }
-box(-30,-26,-20,20,0.75,M.planter); addRail([[-26.1,0.82,-20],[-26.1,0.82,20]],{color:0xffe23a});
+box(-30,-26,-12.5,20,0.75,M.planter); addRail([[-26.1,0.82,-12.5],[-26.1,0.82,20]],{color:0xffe23a});   /* clear of the kicker ramp at z -30..-14 */
 box(26,30,-20,20,0.75,M.planter); addRail([[26.1,0.82,-20],[26.1,0.82,20]],{color:0xffe23a});
 ramp(-3,3,22,27,1.8,'-z'); ramp(-3,3,-27,-22,1.8,'+z');
 for(const [x,z] of [[20,20],[-20,20],[20,-20],[-20,-20],[38,4],[-40,8],[-15,40],[15,-42]]) tree(x,z,1+rnd()*0.3);
@@ -1621,7 +1624,9 @@ function spire(){ const r=findSpotHard(14,31,3); if(!r) return false; const [X0,
   guard([sx0+0.3,sz1+6.2],[sx1-4.3,sz1+6.2],14,0x7ff3ff);
   box(sx1-4,sx1,sz1,sz1+6,20,toon(0x5a5f8a),0.08);                                                           // side block: wall-run it from the balcony
   launchPad(cx-2,sz1+13,0,14,1.4,0x7ff3ff,[cx-2,sz1+3]);                                                     // ground vent up to the balcony
-  launchPad(sx1-2,sz1+3,20,30,1.2,0x7ff3ff,[cx,cz]);                                                         // side block vent up to the roof
+  { const zf=sz1+3, xs=sx1-2.4, xe=sx0+2.6;   /* side block -> roof: a rail up the tower's front face, then a hop over the parapet */
+    const pts=[[sx1-0.6,20.35,zf],[xs,20.7,zf],[xs-(xs-xe)*0.5,25.4,zf],[xe,30.15,zf],[xe,30.15,sz1+0.6],[xe,30.15,sz1-1.8]];
+    const rl=addRail(pts,{color:0x7ff3ff,radius:0.11}); rl.lift=true; const LF={rail:rl,from:20,to:30,start:[xs,zf],end:[xe,sz1],dir:[-1,0],run:0,col:0x7ff3ff}; LIFTS.push(LF); liftDress(LF); }
   xc(cx-3,15.2,sz1+3); xc(sx1-2,21.2,sz1+1.2);
   pushLayerTag([sx1-2,22.1,sz1+5.4,0,0,-1,0,1],{near:[cx,cz,40],ymin:12});                                // L2 piece on the side block
   // sky decks (L3): toward the city centre, floating, linked by downhill rails
@@ -1874,7 +1879,7 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
       const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.5,pillars:false}); solids[i0].sky=true; } }
   buildSummit(made);
   // Mid Floor vents up to the islands (never from under a deck), cables back down
-  const C=FLOOR.cells; let up=0; LIFT_STRICT=true;
+  const C=FLOOR.cells; let up=0; LIFT_STRICT=true; LIFT_MINRUN=4;
   for(const isl of made){ if(up>=10) break; const cand=[];
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T;
       const ex=Math.max(isl.rect[0]-px,0,px-isl.rect[1]), ez=Math.max(isl.rect[2]-pz,0,pz-isl.rect[3]), edge=Math.hypot(ex,ez); if(edge<4||edge>26) continue;
@@ -1885,7 +1890,7 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
     cand.sort((p,q)=>p[0]-q[0]);
     for(const [,px,pz] of cand.slice(0,10)){ const ix=clamp(px,isl.rect[0]+4,isl.rect[1]-4), iz=clamp(pz,isl.rect[2]+4,isl.rect[3]-4);
       if(launchPad(px,pz,MIDY,y,1.4,0xff6fa8,[ix,iz],7)){ isl.vent=true; up++; break; } } }
-  LIFT_STRICT=false;
+  LIFT_STRICT=false; LIFT_MINRUN=0;
   let down=0; for(const isl of made){ if(down>=4||isl.vent) continue; let tgt=null, bd=1e9;
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T, d=Math.hypot(px-isl.x,pz-isl.z); if(d>isl.S/2+14&&d<bd&&d<70){ bd=d; tgt=[px,pz]; } }
     if(!tgt) continue; const d=new V3(tgt[0]-isl.x,0,tgt[1]-isl.z).normalize(); { const sx0=isl.x+d.x*(isl.S/2-0.3), sz0=isl.z+d.z*(isl.S/2-0.3); let clear=true; for(let u=0.08;u<0.95;u+=0.06){ const px=sx0+(tgt[0]-sx0)*u, pz=sz0+(tgt[1]-sz0)*u, py=y+0.12+(MIDY+0.6-y-0.12)*u; if(!riderClear(px,pz,py,0.3)) { clear=false; break; } } if(!clear) continue; } addRail([[isl.x+d.x*(isl.S/2-0.3),y+0.12,isl.z+d.z*(isl.S/2-0.3)],[tgt[0],MIDY+0.6,tgt[1]]],{color:0x7ff3ff,radius:0.08}); down++; }
@@ -1939,7 +1944,7 @@ function courtyard(slot){
     if(gapSide===1){ building(x0,x0+T,z0+T,cz-1.3,h,col); building(x0,x0+T,cz+1.3,z1-T,h,col); } else building(x0,x0+T,z0+T,z1-T,h,col);
     if(gapSide===2){ building(x1-T,x1,z0+T,cz-1.3,h,col); building(x1-T,x1,cz+1.3,z1-T,h,col); } else building(x1-T,x1,z0+T,z1-T,h,col);
     addRail([[x0+T+0.3,h+0.07,z1-T-0.3],[x1-T-0.3,h+0.07,z1-T-0.3]],{color:0xff3d8b,radius:0.07});
-    box(cx+2,cx+4.6,z1-T-2.2,z1-T-0.9,1.3,toon(0x3f8f8a),0.05); addRail([[cx+2.1,1.37,z1-T-1.55],[cx+4.5,1.37,z1-T-1.55]],{color:0xe8e1c7,radius:0.06});
+    if(spaceFree(cx+2,cx+4.6,z1-T-2.2,z1-T-0.9,0,0.15)){ box(cx+2,cx+4.6,z1-T-2.2,z1-T-0.9,1.3,toon(0x3f8f8a),0.05); addRail([[cx+2.1,1.37,z1-T-1.55],[cx+4.5,1.37,z1-T-1.55]],{color:0xe8e1c7,radius:0.06}); }   /* only where it fits in the court */
     xc(cx-3,1.2,cz); xc(cx+3,1.2,cz+2);
     const tag=[cx,2.6,z0+T+0.06,0,0,1]; if(slot==='push') D.tags.push(tag); else D.tags[slot]=tag;
     return true; }
