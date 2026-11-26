@@ -2447,6 +2447,20 @@ function crewTargets(){ const T=[{id:MP.id||'me',local:true,pos:P.pos,vel:P.vel,
   for(const p of crewHere()) T.push({id:p.id,local:false,pos:p.R.pos,vel:p.R.vel,grind:!!p.R.grind,air:!p.R.grounded&&!p.R.grind,name:p.name}); return T; }
 function policeHost(){ const ids=[MP.id,...crewHere().map(p=>p.id)].filter(Boolean); return !MP.live||ids.length<2||String(MP.id)===ids.map(String).sort()[0]; }   // lowest id in the district runs the cops
 function hitTarget(T,n,why,push){ if(T.local){ hurt(n,why); if(push){ if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(push[0],push[1],push[2]); } } else mpSend({t:'hit',to:T.id,n,why,push}); }
+const COP_CLIMB=1.8;
+/* where a cop should start climbing to reach the deck/roof under point K: the nearest edge with a clear wall face below it.
+   No clear face straight up from where they stand (a deck overhead in the way)? climb onto the Mid Floor first. */
+function copClimbPoint(c,K){ const topOf=s=>s.type==='ramp'?null:s.top;
+  const support=(x,z,y)=>{ let best=null; for(const s of solids){ const t=topOf(s); if(t==null||x<s.x0||x>s.x1||z<s.z0||z>s.z1||t<y-0.8||t>y+0.4) continue; if(!best||t>best.top) best=s; } return best; };
+  const colClear=(x,z,y0,y1)=>!solids.some(s=>{ const t=s.type==='ramp'?s.y0+s.h:s.top; return x>s.x0-0.35&&x<s.x1+0.35&&z>s.z0-0.35&&z<s.z1+0.35&&t>y0+0.6&&t<y1-0.1&&(s.bot===undefined||s.bot<y1); });
+  const edges=(S)=>{ const out=[], m=0.45; for(const [ex,ez,nx,nz] of [[S.x0-m,null,-1,0],[S.x1+m,null,1,0],[null,S.z0-m,0,-1],[null,S.z1+m,0,1]]){
+      const a0=ex==null?S.x0+0.8:S.z0+0.8, a1=ex==null?S.x1-0.8:S.z1-0.8, n=Math.max(1,Math.ceil((a1-a0)/3));   /* points every ~3m along the edge */
+      for(let k=0;k<=n;k++){ const u=a0+(a1-a0)*k/n, x=ex??u, z=ez??u; out.push({x,z,ix:-nx,iz:-nz,top:S.top,d:Math.hypot(x-c.pos.x,z-c.pos.z)}); } } return out.sort((a,b)=>a.d-b.d).slice(0,40); };
+  const tryS=(S)=>{ if(!S||S.x1-S.x0<1.6||S.z1-S.z0<1.6) return null; for(const e of edges(S)){ if(e.d>90) continue; const base=ground(e.x,e.z,c.y+0.6).h; if(Math.abs(base-c.y)>1.2||blocked(e.x,e.z,base)) continue; if(colClear(e.x,e.z,base,S.top)){ e.base=base; return e; } } return null; };
+  let S=support(K.x,K.z,K.y), cp=tryS(S); if(cp) return cp;
+  if(c.y<MIDY-1&&K.y>MIDY+2){ const mids=solids.filter(s=>s.floor&&s.type==='box'&&Math.abs(s.top-MIDY)<0.1).sort((a,b)=>Math.hypot((a.x0+a.x1)/2-c.pos.x,(a.z0+a.z1)/2-c.pos.z)-Math.hypot((b.x0+b.x1)/2-c.pos.x,(b.z0+b.z1)/2-c.pos.z));
+    for(const M of mids.slice(0,6)){ cp=tryS(M); if(cp) return cp; } }
+  return null; }
 function copSees(c,T=crewTargets()[0]){ const PP=T.pos, dx=PP.x-c.pos.x, dz=PP.z-c.pos.z, d=Math.hypot(dx,dz); if(d>38||PP.y-c.y>7) return false;
   const fwd=Math.sin(c.yaw)*dx/d+Math.cos(c.yaw)*dz/d; if(d>8&&fwd<-0.2) return false;                            // can't see behind unless close
   return eyeLine(c.pos.clone().setY(c.y+1.8),PP.clone().setY(PP.y+1.2)); }
@@ -2479,7 +2493,7 @@ function sprayAt(o,f,mine){ let hits=0;
     else if(c.daze<=0){ c.daze=5+Math.random()*5; c.see=false; c.wander=null; } }
   for(const d of PDRONES) if(d.daze<=0&&inCone(d.pos)){ d.daze=6+Math.random()*4; hits++; }
   if(hits){ if(mine){ trick(hits>1?'Paint Blast x'+hits:'Paint Shot',90*hits); popup('DAZED!'); } if(!COPS.some(c=>c.daze<=0&&c.see)) lastKnown=null; } }   // paint in their eyes: they lose your trail
-window.__police={get BOSS(){ return BOSS; },startBoss:()=>startBoss(),get beaten(){ return bossesBeaten; },COPS,PDRONES,get heat(){ return heat; },set heat(v){ heat=v; },get evade(){ return evadeT; },get spot(){ return spotT; },get last(){ return lastKnown; },sprayBurst,hurt};
+window.__police={get BOSS(){ return BOSS; },startBoss:()=>startBoss(),get beaten(){ return bossesBeaten; },COPS,PDRONES,get heat(){ return heat; },set heat(v){ heat=v; },get evade(){ return evadeT; },get spot(){ return spotT; },get last(){ return lastKnown; },set last(v){ lastKnown=v; },sprayBurst,hurt};
 // ---- crew police sync: the host broadcasts the force; everyone else mirrors it
 let nidSeq=1, POLSNAP=null;
 function policeSnapshot(){ const B=BOSS.boss&&BOSS.active?BOSS.boss:null;
@@ -2543,6 +2557,7 @@ function updatePolice(dt){
     const T=c.tg, TP=T.pos, dx=TP.x-c.pos.x, dz=TP.z-c.pos.z, dist=Math.hypot(dx,dz)||0.01;
     if(c.leave){ c.daze=0; c.stars.visible=false; if(dist>70||(c.gone=(c.gone||0)+dt)>6){ scene.remove(g); COPS.splice(i,1); continue; } }
     if(c.kind&&c.daze>0&&!P.grounded&&!P.grind&&P.vel.y<0&&dist<1.6*(c.kind==='boss'?1.5:1)&&P.pos.y>c.y+1.2){ P.vel.y=CFG.JUMP*0.95; bossDamage(c,2,'STOMP!'); sfx.stomp(); continue; }   // stomp a stunned enemy
+    if(c.daze>0&&c.climb){ c.climb=null; c.cp=null; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; g.position.y=c.y; }   /* paint knocks a climber off the wall */
     if(c.daze>0){ c.daze-=dt; c.see=false; c.stars.visible=true; c.stars.rotation.y+=dt*5; g.rotation.y+=dt*2.5; c.armL.rotation.x=c.armR.rotation.x=-2.6+Math.sin(clock*8)*0.3; c.legL.rotation.x=c.legR.rotation.x=0; if(c.daze<=0){ c.stars.visible=false; c.wander=null; } continue; }
     c.stars.visible=false; if(!c.leave) nearest=Math.min(nearest,dist);
     if(c.losT<=0){ c.losT=0.3; c.see=false; if(!c.leave){ let best=null; for(const t of TG) if(copSees(c,t)&&(!best||t.pos.distanceTo(c.pos)<best.pos.distanceTo(c.pos))) best=t; if(best){ c.see=true; c.tg=best; } } }
@@ -2552,13 +2567,22 @@ function updatePolice(dt){
           if(dist<1.9&&Math.abs(TP.y-c.y)<2&&!(T.local&&(P.invuln>0||P.knock>0))&&!(c.hitCd>clock)){ c.hitCd=clock+1.5; hitTarget(T,26,'BODY SLAMMED!',[dx/dist*10,6,dz/dist*10]); c.charge=0; } continue; }
         if(c.see&&dist<16&&dist>4&&c.chargeCd<=0){ c.chargeCd=6+Math.random()*3; c.charge=0.75; c.yaw=Math.atan2(dx,dz); popup('INCOMING!','bad'); blip(120,0.3,'sawtooth',0.1,60); continue; }
         if(c.callCd<=0&&PDRONES.length<3){ c.callCd=14; lastKnown=TP.clone(); launchDrone(c); } } }
-    let tgt=c.kind?TP:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.see?TP:(lastKnown||(heat>0?P.dispatch:null));
-    if(!tgt||(!c.see&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
+    if(c.climb){ const k=c.climb; c.y=Math.min(k.top,c.y+COP_CLIMB*dt); g.position.set(c.pos.x,c.y,c.pos.z); g.rotation.y=c.yaw=k.yaw;   /* scaling a wall: slow, hand over hand */
+      const sw=Math.sin(clock*7+i); c.armL.rotation.x=-2.6+sw*0.5; c.armR.rotation.x=-2.6-sw*0.5; c.legL.rotation.x=sw*0.6; c.legR.rotation.x=-sw*0.6;
+      if(c.y>=k.top-0.01){ c.pos.x+=k.ix*1.3; c.pos.z+=k.iz*1.3; c.y=ground(c.pos.x,c.pos.z,k.top+0.6).h; c.climb=null; c.cp=null; } continue; }
+    if(c.kind!=='boss'&&!c.leave&&heat>0&&lastKnown&&lastKnown.y>c.y+2.5){   /* you've been spotted up high: head for an edge and climb */
+      if(!c.cp||c.cp.k.distanceTo(lastKnown)>4||(c.cpT=(c.cpT||0)+dt)>12){ c.cp=copClimbPoint(c,lastKnown); c.cpT=0; if(c.cp) c.cp.k=lastKnown.clone(); }
+      if(c.cp){ const ex=c.cp.x-c.pos.x, ez=c.cp.z-c.pos.z; if(Math.hypot(ex,ez)<0.9&&Math.abs(c.y-c.cp.base)<1.5){ c.pos.x=c.cp.x; c.pos.z=c.cp.z; c.climb={top:c.cp.top,ix:c.cp.ix,iz:c.cp.iz,yaw:Math.atan2(c.cp.ix,c.cp.iz)}; c.see=false;
+          if(alertMsgT<=0&&T.local){ alertMsgT=8; popup('COPS ARE CLIMBING UP!','bad'); } continue; } } }
+    else if(c.cp) c.cp=null;
+    let tgt=c.kind?TP:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.cp?new V3(c.cp.x,c.y,c.cp.z):c.see?TP:(lastKnown||(heat>0?P.dispatch:null));
+    if(!tgt||(!c.see&&!c.cp&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
     if(c.detour){ if((c.detourT-=dt)<=0||c.detour.distanceTo(c.pos)<1.5) c.detour=null; else tgt=c.detour; }
     const tx=tgt.x-c.pos.x, tz=tgt.z-c.pos.z, tl=Math.hypot(tx,tz)||1, spd=(c.see?(dist>16?8.2:6.5):c.leave?4:6)*(AFTER()?1.15:1);
     // steering: the straight line first, then fanned angles round whatever is in the way
     let mx=0, mz=0; const a0=Math.atan2(tx,tz), side=(i%2?1:-1);
-    for(const off of [0,0.6*side,-0.6*side,1.2*side,-1.2*side,1.75*side,-1.75*side]){ const a=a0+off, sx=Math.sin(a)*spd*dt, sz=Math.cos(a)*spd*dt; if(!blocked(c.pos.x+sx,c.pos.z+sz,c.y)){ mx=sx; mz=sz; break; } }
+    const goingUp=c.kind!=='boss'&&heat>0&&lastKnown&&lastKnown.y>c.y+2.5&&c.y>2;   /* climbing after you: don't step off the ledge you just scaled */
+    for(const off of [0,0.6*side,-0.6*side,1.2*side,-1.2*side,1.75*side,-1.75*side]){ const a=a0+off, sx=Math.sin(a)*spd*dt, sz=Math.cos(a)*spd*dt; if(!blocked(c.pos.x+sx,c.pos.z+sz,c.y)&&!(goingUp&&ground(c.pos.x+sx*4,c.pos.z+sz*4,c.y+0.6).h<c.y-1.5)){ mx=sx; mz=sz; break; } }
     const prog=(mx*tx+mz*tz)/tl; c.stuckT=prog<spd*dt*0.25?(c.stuckT||0)+dt:0;
     if(c.stuckT>0.9&&!c.detour){ const pa=a0+side*(Math.PI/2)*(Math.random()<0.7?1:-1), r=10+Math.random()*10; c.detour=c.pos.clone().add(new V3(Math.sin(pa)*r+Math.sin(a0)*6,0,Math.cos(pa)*r+Math.cos(a0)*6)); c.detourT=3; c.stuckT=0; }
     c.pos.x+=mx; c.pos.z+=mz; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; g.position.set(c.pos.x,c.y,c.pos.z);
