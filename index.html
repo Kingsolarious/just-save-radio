@@ -2546,12 +2546,18 @@ const COPM={ jacket:toon(0x26305a), shirt:toon(0x8fb0e8), skin:toon(0xc98b62), c
   pants:toon(0x1d2547), stripe:toon(0xf2c83a), belt:toon(0x121218), buckle:metal(0xd9dce6), glove:toon(0x18181f), tie:toon(0x141a33), white:toon(0xf4efe3), ink:toon(0x111114),
   glass:new THREE.MeshBasicMaterial({color:0x0d0f1a}), shine:new THREE.MeshBasicMaterial({color:0x7ff3ff}), gun:metal(0x2a2c33), sole:toon(0x2a2a30), radio:toon(0x22242c), mic:toon(0x0f0f12),
   armor:toon(0x2b2f3a), plate:metal(0x59606e), gold:metal(0xf2c83a), red:toon(0xc8323c), hair:toon(0x2a1c14), med:[toon(0xe94b42),toon(0x39a6b8),toon(0xf2a52f)] };
-const COP_SKIN=[0xc98b62,0x8b5a3c,0xe8b48a,0x6b4128,0xd9a070].map(c=>toon(c));
+/* each district has its own force: every cop on a map looks the same, the look changes from map to map */
+const COP_STYLE={
+  harbor:{ name:'HARBOR PD',  jacket:0x26305a, pants:0x1d2547, shirt:0x8fb0e8, cap:0x1b1f3a, stripe:0xf2c83a, skin:0xc98b62, shades:true,  stache:false },
+  yards: { name:'YARD PATROL', jacket:0x3d4636, pants:0x2c3328, shirt:0xc9c2a6, cap:0x262b22, stripe:0xe8732e, skin:0x8b5a3c, shades:false, stache:true  },
+  pier:  { name:'PIER WATCH',  jacket:0x1f5f78, pants:0x173f52, shirt:0xe8f4f8, cap:0xf4efe3, stripe:0xff6fa8, skin:0xe8b48a, shades:true,  stache:false } }[DKEY]||null;
+if(COP_STYLE){ COPM.jacket=toon(COP_STYLE.jacket); COPM.pants=toon(COP_STYLE.pants); COPM.shirt=toon(COP_STYLE.shirt); COPM.cap=toon(COP_STYLE.cap); COPM.stripe=toon(COP_STYLE.stripe); }
+const COP_SKIN=[toon(COP_STYLE?COP_STYLE.skin:0xc98b62)];
 function limb(w,h,d,mat,y){ const piv=new THREE.Group(); piv.position.y=y; const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.y=-h/2; outline(m,0.03); piv.add(m); return piv; }
 const COPV={ minion:{ jacket:toon(0x4a3f7a), shirt:toon(0x2a2440), cap:toon(0x15131f), pants:toon(0x2a2440) }, boss:{ jacket:toon(0x8a1c2a), shirt:toon(0xf4efe3), cap:toon(0x2a1012), pants:toon(0x1b1016) } };
 /* a cel-shaded beat cop: creased uniform, duty belt, gloves, sidearm, radio mic, cap with badge, shades or eyes -- minions in riot gear, the boss in dress uniform */
 function makeCop(kind){ const V=COPV[kind]||{}; const g=new THREE.Group(), M=COPM, B=(w,h,d,mat,x,y,z,parent=g,ol=0)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.set(x,y,z); if(ol) outline(m,ol); parent.add(m); return m; };
-  const skin=COP_SKIN[Math.floor(Math.random()*COP_SKIN.length)];
+  const skin=COP_SKIN[0];
   // legs: trousers with a side stripe, a knee crease, boots with soles and toe caps
   const legL=limb(0.25,0.9,0.27,M.pants,0.95), legR=limb(0.25,0.9,0.27,M.pants,0.95); legL.position.x=-0.15; legR.position.x=0.15; g.add(legL,legR);
   for(const [L,sd] of [[legL,-1],[legR,1]]){ B(0.02,0.82,0.05,M.stripe,sd*0.128,-0.45,0,L); B(0.24,0.03,0.02,M.ink,0,-0.46,0.137,L);
@@ -2587,9 +2593,9 @@ function makeCop(kind){ const V=COPV[kind]||{}; const g=new THREE.Group(), M=COP
   if(kind==='minion'){ const helm=new THREE.Mesh(new THREE.SphereGeometry(0.25,14,10,0,Math.PI*2,0,Math.PI*0.6),M.armor); helm.position.y=2.1; outline(helm,0.03); g.add(helm);
     const visor=B(0.38,0.16,0.06,new THREE.MeshBasicMaterial({color:0x7ff3ff,transparent:true,opacity:0.75}),0,2.08,0.2); visor.rotation.x=-0.15;
     B(0.36,0.05,0.04,M.plate,0,2.19,0.2); }
-  else { if(Math.random()<0.6||kind==='boss'){ B(0.32,0.07,0.04,M.glass,0,2.11,0.2); B(0.06,0.02,0.01,M.shine,-0.07,2.13,0.225); B(0.06,0.02,0.01,M.shine,0.09,2.13,0.225); }
+  else { if((COP_STYLE?COP_STYLE.shades:true)||kind==='boss'){ B(0.32,0.07,0.04,M.glass,0,2.11,0.2); B(0.06,0.02,0.01,M.shine,-0.07,2.13,0.225); B(0.06,0.02,0.01,M.shine,0.09,2.13,0.225); }
       else for(const sd of [-1,1]){ B(0.07,0.05,0.02,M.white,sd*0.08,2.11,0.2); B(0.035,0.04,0.02,M.ink,sd*0.08,2.11,0.21); B(0.09,0.02,0.02,M.ink,sd*0.08,2.16,0.2); }
-    if(Math.random()<0.4) B(0.16,0.04,0.03,M.hair,0,1.99,0.21);                                             // mustache
+    if(COP_STYLE?COP_STYLE.stache:false) B(0.16,0.04,0.03,M.hair,0,1.99,0.21);                                // mustache
     B(0.12,0.015,0.02,M.ink,0,1.95,0.205);                                                                  // mouth
     const capCrown=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.22,0.16,16),M.cap); capCrown.position.y=2.27; outline(capCrown,0.03); g.add(capCrown);
     const band=new THREE.Mesh(new THREE.CylinderGeometry(0.225,0.225,0.05,16),kind==='boss'?M.gold:M.ink); band.position.y=2.2; g.add(band);
