@@ -226,7 +226,7 @@
 </div>
 <div id="tunnel" class="hidden"><div class="rings"></div><div class="streaks"></div><div class="tcard"><small>NOW ENTERING</small><b id="tname"></b><i>LOADING · STAY TUNED</i></div></div>
 <script>try{ const t=JSON.parse(sessionStorage.getItem('jsr_travel')||'null'); const want=location.hash.slice(1);
-  if(t&&Date.now()-t.t<20000&&(!want||want===t.to)){ document.documentElement.classList.add('traveling');
+  if(t&&Date.now()-t.t<90000&&(!want||want===t.to)){ document.documentElement.classList.add('traveling');
     document.getElementById('tname').textContent={harbor:'HARBOR HEIGHTS',yards:'RUSTLINE YARDS',pier:'PULSE PIER'}[t.to]||''; } }catch(e){}</script>
 <div id="pause" class="screen hidden">
   <div class="logo" style="font-size:clamp(48px,9vw,80px)">PAUSED</div>
@@ -3575,7 +3575,7 @@ addEventListener('keydown',e=>{ const id=menuScreen(); if(!id||e.target.tagName=
 // ====================================================================== TRAVEL (loading tunnel between districts)
 const TOTAL_TAGS=Object.values(DISTRICTS).reduce((a,d)=>a+(d===D?d.tags.length:d.tags.length+EXTRA_TAGS),0);   // this district's list already holds its extras
 let tagsByDistrict={}, secrets=[], traveling=false;
-function readTravel(){ try{ const t=JSON.parse(sessionStorage.getItem('jsr_travel')||'null'); if(t&&Date.now()-t.t<20000&&t.to===DKEY) return t; }catch(e){} return null; }
+function readTravel(){ try{ const t=JSON.parse(sessionStorage.getItem('jsr_travel')||'null'); if(t&&Date.now()-t.t<90000&&t.to===DKEY) return t; }catch(e){} return null; }
 function checkGates(){
   if(traveling||state!=='play'||P.knock>0) return;
   for(const g of GATES){ const rx=P.pos.x-g.p.x, rz=P.pos.z-g.p.z, depth=rx*g.o.x+rz*g.o.z, lat=rx*g.t.x+rz*g.t.z;
@@ -3851,10 +3851,12 @@ const hosted=!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
 async function gateEnter(){ const code=$('gcode').value, name=($('gcrew').value||'NOVA').toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8)||'NOVA';
   $('gstatus').textContent='CHECKING…'; $('genter').disabled=true;
   try{ await supaLogin(code,name); $('crew').value=name; $('mpcode').value=normCode(code); try{ localStorage.setItem('inkline_crew',name); }catch(e){}
-    $('gate').classList.add('hidden'); $('title').classList.remove('hidden'); MENU.screen=null; menuFocus(); mpConnect(); }
+    $('gate').classList.add('hidden'); if(state==='title'){ $('title').classList.remove('hidden'); MENU.screen=null; menuFocus(); } mpConnect(); }   /* mid-run (after a tunnel) the login stays silent */
   catch(e){ $('gstatus').textContent=loginError(e); } $('genter').disabled=false; }
 $('genter').onclick=gateEnter; $('gcode').addEventListener('keydown',e=>{ if(e.key==='Enter') gateEnter(); });
-if(SUPA&&ONLINE.requireCode!==false&&hosted&&state==='title'){   // private test build: the access code comes first
+if(SUPA&&ONLINE.requireCode!==false&&hosted&&readTravel()){   // arriving through a tunnel: sign back in quietly, never show a menu
+  const saved=(()=>{ try{ return localStorage.getItem('inkline_code'); }catch(e){ return null; } })(); if(saved){ $('gcode').value=saved; $('gcrew').value=$('crew').value; gateEnter(); } }
+else if(SUPA&&ONLINE.requireCode!==false&&hosted&&state==='title'){   // private test build: the access code comes first
   $('title').classList.add('hidden'); $('gate').classList.remove('hidden'); $('gcrew').value=$('crew').value;
   const saved=(()=>{ try{ return localStorage.getItem('inkline_code'); }catch(e){ return null; } })();
   if(saved){ $('gcode').value=saved; gateEnter(); } }
