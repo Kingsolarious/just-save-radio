@@ -716,18 +716,9 @@ function guard(a,b,y,color=0xffe23a,lift=0.9){ return addRail([[a[0],y+lift,a[1]
 const LIFTS=[]; let LIFT_STRICT=false;
 function riderClear(x,z,y,R=0.7){ for(const s of solids){ if(x<=s.x0-R||x>=s.x1+R||z<=s.z0-R||z>=s.z1+R) continue; const top=topAt(s,x,z); if(top>y-0.15&&(s.bot===undefined||s.bot<y+1.75)) return false; } return true; }
 /* ---- grind lifts as city infrastructure: a painted run-up, a neon gateway that says where it goes, a girder under the rail ---- */
-const LIFTM={ beam:metal(0x3a3f4a), post:metal(0x2a2f3a) }, liftSignCache={};
-function liftSign(txt,col){ return liftSignCache[txt+col]??=canvasTex(256,96,(g,w,h)=>{ g.fillStyle='#15131f'; g.fillRect(0,0,w,h); g.strokeStyle='#'+col.toString(16).padStart(6,'0'); g.lineWidth=8; g.strokeRect(4,4,w-8,h-8);
-  g.fillStyle=g.strokeStyle; g.font='bold 44px Bungee, Impact'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('▲ '+txt,w/2,h/2+3); }); }
-function liftDress(L){ const r=L.rail, p0=L.run?r.pts[1]:r.pts[0], [ux,uz]=L.dir, sx=-uz, sz=ux, y=L.from, col=L.col, neon=new THREE.MeshBasicMaterial({color:col});
+const LIFTM={ beam:metal(0x3a3f4a), post:metal(0x2a2f3a) };
+function liftDress(L){ const r=L.rail;
   const txt=L.to>=SKYY-1?'SKY':L.to>=MIDY-1?(L.from>=MIDY-1?'ROOF':'MID'):'ROOF';
-  // gateway arch over the entry
-  const q0=r.pts[0], gx=q0.x-ux*(L.run?0.6:1.2), gz=q0.z-uz*(L.run?0.6:1.2);   /* the arch stands over the way in */ for(const sd of [-1.5,1.5]){ const post=new THREE.Mesh(new THREE.BoxGeometry(0.22,3.2,0.22),LIFTM.post); post.position.set(gx+sx*sd,y+1.6,gz+sz*sd); outline(post,0.03); world.add(post);
-    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.08,2.8,0.08),neon); strip.position.set(gx+sx*sd+ux*0.13,y+1.6,gz+sz*sd+uz*0.13); world.add(strip); }
-  const bar=new THREE.Mesh(new THREE.BoxGeometry(3.3,0.7,0.16),[LIFTM.post,LIFTM.post,LIFTM.post,LIFTM.post,new THREE.MeshBasicMaterial({map:liftSign(txt,col)}),new THREE.MeshBasicMaterial({map:liftSign(txt,col)})]);
-  bar.position.set(gx,y+3.35,gz); bar.rotation.y=Math.atan2(ux,uz); world.add(bar);
-  // painted chevrons on the run-up
-  if(L.run){ for(let q=0;q<3;q++){ const cx=p0.x-ux*(4.2+q*1.8), cz=p0.z-uz*(4.2+q*1.8); for(const sd of [-1,1]){ const m=new THREE.Mesh(new THREE.PlaneGeometry(0.28,1.3),neon); m.rotation.set(-Math.PI/2,0,Math.atan2(ux,uz)+sd*0.75); m.position.set(cx+sx*sd*0.42,y+0.06,cz+sz*sd*0.42); world.add(m); } } }
   // a girder under every climbing segment so it reads as a structure, not a floating rail
   for(let i=L.run?1:0;i<r.pts.length-1;i++){ const a=r.pts[i], b=r.pts[i+1], d=b.clone().sub(a), len=d.length(); if(len<0.5) continue;
     const gb=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.5,len),LIFTM.beam); gb.position.copy(a).add(b).multiplyScalar(0.5); gb.position.y-=0.5; gb.lookAt(b.x,b.y-0.5,b.z); outline(gb,0.03); world.add(gb); } }
@@ -739,20 +730,31 @@ function liftCatch(){ const hs=Math.hypot(P.vel.x,P.vel.z); if(hs<2.5) return;
     P.vel.set(ux*Math.max(hs,9),0,uz*Math.max(hs,9)); startGrind(r,0.3); trick('Lift',40); return; } }
 function launchPad(x,z,y,toH,r,col=0x7ff3ff,target=null){ const tx=target?target[0]:x, tz=target?target[1]:z, rise=toH-y;
   let bx=x-tx, bz=z-tz; if(Math.hypot(bx,bz)<0.5){ bx=1; bz=0; } const a0=Math.atan2(bx,bz);
-  for(const da of [0,0.45,-0.45,0.9,-0.9,1.4,-1.4,1.9,-1.9,2.5,-2.5,Math.PI]){ const dx=Math.sin(a0+da), dz=Math.cos(a0+da);
-    let e=0; while(e<45&&ground(tx+dx*e,tz+dz*e,toH+0.6).h>toH-0.35) e+=0.4; if(e<0.4||e>=45) continue;      // walk out to the edge of the destination
-    const ex=tx+dx*(e-0.35), ez=tz+dz*(e-0.35);
-         let deck=true; for(let q=0.3;q<=5;q+=0.5){ const qx=ex-dx*q, qz=ez-dz*q; if(Math.abs(ground(qx,qz,toH+0.6).h-toH)>0.35||!riderClear(qx,qz,toH+0.25)) { deck=false; break; } } if(!deck) continue;   /* the top of the lift must land on 5m of open deck */
-    for(const run of [8,4,0]) for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4]){   /* a lift with a run-up beats a gentler one without */ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
-      if(Math.abs(sx)>EDGE-3||Math.abs(sz)>EDGE-3||(D.openSouth&&sz>90)) continue;
-      if(Math.abs(ground(sx,sz,y+1.2).h-y)>0.6) continue;                                                // must start on the surface you're riding
-      if(run){ let clear=true; for(let q=1;q<=run;q++){ const qx=sx+dx*q, qz=sz+dz*q; if(Math.abs(qx)>EDGE-2||Math.abs(qz)>EDGE-2||Math.abs(ground(qx,qz,y+1.2).h-y)>0.4||!riderClear(qx,qz,y+0.3,0.6)){ clear=false; break; } } if(!clear) continue; }   /* a straight run-up into it */
-      let ok=true; const n=Math.max(4,Math.ceil(Math.hypot(L,rise)/1.2));
-      for(let k=0;k<n&&ok;k++){ const u=k/n, px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(!riderClear(px,pz,py,u>0.8?0:0.4)) ok=false; else if(u<0.85&&rails.some(o=>{ if(o.bb&&(px<o.bb[0]-2.5||px>o.bb[1]+2.5||pz<o.bb[2]-2.5||pz>o.bb[3]+2.5)) return false; const c=railClosest(o,{x:px,y:py,z:pz}); return c.d2<6.25&&Math.abs(c.y-py)<2.5; })) ok=false;   /* lifts never cross another rail on the way up */ }
-      if(!ok) continue;
-      const pts=run?[[sx+dx*2.2,y+0.32,sz+dz*2.2]]:[]; const seg=Math.max(1,Math.ceil(L/7)); for(let k=0;k<=seg;k++){ const u=k/seg; pts.push([sx+(ex-sx)*u,y+0.7+(toH+0.15-y-0.7)*u,sz+(ez-sz)*u]); }   /* a low lead-in you roll straight onto */
-      pts.push([ex-dx*1.8,toH+0.15,ez-dz*1.8]);
-      const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; const LF={rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez],dir:[-dx,-dz],run,col:col||0x7ff3ff}; LIFTS.push(LF); liftDress(LF); return rl; } }
+  /* city-grid directions first (lifts run parallel to the streets and building faces), the free angles only as a fallback */
+  const grid=[0,Math.PI/2,Math.PI,-Math.PI/2].sort((p,q)=>Math.abs(angDiff(p,a0))-Math.abs(angDiff(q,a0)));
+  const wallAt=(px,pz,py)=>solids.some(s=>px>s.x0&&px<s.x1&&pz>s.z0&&pz<s.z1&&(s.type==='ramp'?s.y0+s.h:s.top)>py-0.3&&(s.bot===undefined||s.bot<py+1.2));
+  let best=null;
+  for(const pass of [0,1]){ const dirs=pass===0?grid:[0.45,-0.45,0.9,-0.9,1.4,-1.4,1.9,-1.9,2.5,-2.5].map(d=>a0+d);
+    for(const ang of dirs){ const dx=Math.sin(ang), dz=Math.cos(ang);
+      let e=0; while(e<45&&ground(tx+dx*e,tz+dz*e,toH+0.6).h>toH-0.35) e+=0.4; if(e<0.4||e>=45) continue;      // walk out to the edge of the destination
+      const ex=tx+dx*(e-0.35), ez=tz+dz*(e-0.35);
+      let deck=true; for(let q=0.3;q<=5;q+=0.5){ const qx=ex-dx*q, qz=ez-dz*q; if(Math.abs(ground(qx,qz,toH+0.6).h-toH)>0.35||!riderClear(qx,qz,toH+0.25)) { deck=false; break; } } if(!deck) continue;   /* lands on 5m of open deck */
+      for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4]){ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
+        if(Math.abs(sx)>EDGE-3||Math.abs(sz)>EDGE-3||(D.openSouth&&sz>90)) continue;
+        if(Math.abs(ground(sx,sz,y+1.2).h-y)>0.6) continue;                                              // must start on the surface you're riding
+        let run=0; for(let q=1;q<=10;q++){ const qx=sx+dx*q, qz=sz+dz*q; if(Math.abs(qx)>EDGE-2||Math.abs(qz)>EDGE-2||Math.abs(ground(qx,qz,y+1.2).h-y)>0.4||!riderClear(qx,qz,y+0.3,0.6)) break; run=q; }
+        const sc0=Math.min(run,10)*3+(pass?0:14)-slope*4; if(best&&sc0+12<=best.sc) continue;                  // can't beat the best even with a wall to ride beside
+        let ok=true; const n=Math.max(4,Math.ceil(Math.hypot(L,rise)/1.2));
+        for(let k=0;k<n&&ok;k++){ const u=k/n, px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(!riderClear(px,pz,py,u>0.8?0:0.4)) ok=false; else if(u<0.85&&rails.some(o=>{ if(o.bb&&(px<o.bb[0]-2.5||px>o.bb[1]+2.5||pz<o.bb[2]-2.5||pz>o.bb[3]+2.5)) return false; const c=railClosest(o,{x:px,y:py,z:pz}); return c.d2<6.25&&Math.abs(c.y-py)<2.5; })) ok=false; }
+        if(!ok) continue;
+        let hug=0; const lx=-dz, lz=dx; for(const u of [0.25,0.5,0.75]){ const px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(wallAt(px+lx*1.8,pz+lz*1.8,py)||wallAt(px-lx*1.8,pz-lz*1.8,py)) hug++; }
+        const sc=sc0+hug*4;                                                                                // a rail running up a building face beats one hanging in the open
+        if(!best||sc>best.sc) best={sc,dx,dz,sx,sz,ex,ez,L,run:run>=8?8:run>=4?4:0}; } }
+    if(best) break; }
+  if(best){ const {dx,dz,sx,sz,ex,ez,L,run}=best;
+    const pts=run?[[sx+dx*2.2,y+0.32,sz+dz*2.2]]:[]; const seg=Math.max(1,Math.ceil(L/7)); for(let k=0;k<=seg;k++){ const u=k/seg; pts.push([sx+(ex-sx)*u,y+0.7+(toH+0.15-y-0.7)*u,sz+(ez-sz)*u]); }   /* a low lead-in you roll straight onto */
+    pts.push([ex-dx*1.8,toH+0.15,ez-dz*1.8]);
+    const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; const LF={rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez],dir:[-dx,-dz],run,col:col||0x7ff3ff,score:best.sc}; LIFTS.push(LF); liftDress(LF); return rl; }
   // nothing clear: a steep direct rail from where the vent would have been
   if(LIFT_STRICT) return null;
   const pts=[[x,y+0.7,z],[tx,toH+0.15,tz]], rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[x,z],end:[tx,tz],fallback:true}); return rl; }
@@ -1620,7 +1622,9 @@ const MIDY=12, SKYY=40, FLOOR={skyways:[],plazas:[],islands:[]};
 function tallBlock(x0,x1,z0,z1,ylo,yhi,noRails){   // anything that would poke through a floor slab at this height
   if(solids.some(s=>!s.floor&&x0<s.x1&&x1>s.x0&&z0<s.z1&&z1>s.z0&&(s.type==='ramp'?s.y0+s.h:s.top)>ylo&&(s.bot===undefined||s.bot<yhi))) return true;
   if(noRails) return false; const cx=(x0+x1)/2, cz=(z0+z1)/2, hd=Math.hypot(x1-x0,z1-z0)/2+1;
-  return rails.some(r=>{ if(r.edge||r.floor) return false; for(let i=0;i<r.pts.length-1;i++){ const a=r.pts[i], b=r.pts[i+1]; if(Math.max(a.y,b.y)<ylo-0.5||Math.min(a.y,b.y)>yhi+1) continue; if(segD(cx,cz,a,b)<hd) return true; } return false; }); }
+  return rails.some(r=>{ if(r.edge||r.floor) return false; for(let i=0;i<r.pts.length-1;i++){ const a=r.pts[i], b=r.pts[i+1]; if(Math.max(a.y,b.y)<ylo-0.5||Math.min(a.y,b.y)>yhi+1) continue;
+      if(r.wrap){ const n=Math.max(2,Math.ceil(a.distanceTo(b)/1.5)); for(let k=0;k<=n;k++){ const u=k/n, px=a.x+(b.x-a.x)*u, py=a.y+(b.y-a.y)*u, pz=a.z+(b.z-a.z)*u; if(py>ylo-0.5&&py<yhi+1&&px>x0-1.2&&px<x1+1.2&&pz>z0-1.2&&pz<z1+1.2) return true; } continue; }   /* spirals hug their tower: test them exactly */
+      if(segD(cx,cz,a,b)<hd) return true; } return false; }); }
 function floorFeature(cx,cz,y,k){ const t=k%4, cream=toon(0xe8e1c7);
   if(t===0){ const b=box2(cx-3,cx+3,cz-0.6,cz+0.6,y,y+0.7,toon(0xf2a52f)); addRail([[cx-2.8,y+0.77,cz],[cx+2.8,y+0.77,cz]],{color:0xffffff,radius:0.06}); }
   else if(t===1){ ramp(cx-2,cx+2,cz-3,cz,1.6,'+z',false,0xf7a7c0,{y0:y,bot:y-0.6}); }
@@ -1656,9 +1660,50 @@ function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sk
         const B={x:(q[0]+q[1])/2,z:(q[2]+q[3])/2,h,r:q,cluster:cid,shape:kind}; out.push(B); Q.push(B); n++; budded++; } }
     if(n){ T0.cluster=cid; clusters++; } }
   FLOOR.clusters=clusters; FLOOR.budded=budded; FLOOR.clusterBridges=clusterBridges(out);
+  FLOOR.wraps=towerWraps(out);
   return out; }
 /* skybridges across the cluster alleys: level roofs get a flat deck, a small step gets a ramp across, a big drop gets a ramp
    running down onto the lower roof (or a grind rail when there's no room) -- guard rails on both sides */
+/* SPIRAL ROUTES: a grind rail on a wall-mounted ledge that wraps round a tower from the street to its roof.
+   The 40m towers in the Sky Floor gaps get one all the way up -- the city's own route to the top level. */
+const WRAPWHY=[]; window.__wrapWhy=WRAPWHY;
+const WRAPM={ ledge:toon(0x3a3448), bracket:metal(0x5a5f6a) };
+function towerWraps(T){ let n=0, mids=0; const done=[];
+  const cand=T.filter(t=>t.sky||(t.shape==='box'||!t.shape)&&t.h>=16).sort((a,b)=>(b.sky?1:0)-(a.sky?1:0)||b.h-a.h);
+  for(const t of cand){ if(!t.sky&&mids>=4) continue; if(done.some(d=>Math.hypot(d.x-t.x,d.z-t.z)<16)) continue;
+    WRAPWHY.push('T'+t.h+(t.sky?'*':'')); const pts=wrapPath(t); if(!pts) continue; buildWrap(t,pts); done.push(t); n++; if(!t.sky) mids++; }
+  return n; }
+function wrapPath(t){ const [x0,x1,z0,z1]=t.r, o=1.4, Ht=t.h+0.15, slope=0.27, ch=1.1, cx=(x0+x1)/2, cz=(z0+z1)/2;
+  const C=[[x0-o,z0-o],[x1+o,z0-o],[x1+o,z1+o],[x0-o,z1+o]], nrm=v=>{ const L=Math.hypot(v[0],v[1]); return [v[0]/L,v[1]/L]; };
+  for(const rev of [false,true]) for(let s0=0;s0<4;s0++){ const seq=k=>C[rev?(((s0-k)%4)+4)%4:(s0+k)%4];
+    const u0=nrm([seq(1)[0]-seq(0)[0],seq(1)[1]-seq(0)[1]]);
+    let ok=true; for(let q=1;q<=6&&ok;q++){ const qx=seq(0)[0]-u0[0]*q, qz=seq(0)[1]-u0[1]*q; if(Math.abs(qx)>EDGE-2||Math.abs(qz)>EDGE-2||Math.abs(ground(qx,qz,1.2).h)>0.3||!riderClear(qx,qz,0.3,0.6)) ok=false; } if(!ok){ WRAPWHY.push('runup'); continue; }   /* a straight run-up into the first face */
+    const pts=[[seq(0)[0]-u0[0]*2,0.32,seq(0)[1]-u0[1]*2],[seq(0)[0],0.7,seq(0)[1]]];
+    let P=seq(0), y=0.7, fin=null;
+    const finish=(Q,w,y0)=>{ const dd=(Ht-y0)/slope, F=[Q[0]+w[0]*dd,Q[1]+w[1]*dd]; let nx=-w[1], nz=w[0]; if((cx-F[0])*nx+(cz-F[1])*nz<0){ nx=-nx; nz=-nz; }
+      return [[F[0],Ht,F[1]],[F[0]+nx*3.2,Ht,F[1]+nz*3.2]]; };   // top out, then hop in over the roof edge
+    for(let k=0;k<40&&!fin;k++){ const A=seq(k+1), Bn=seq(k+2), u=nrm([A[0]-P[0],A[1]-P[1]]), v=nrm([Bn[0]-A[0],Bn[1]-A[1]]);
+      const a=[A[0]-u[0]*ch,A[1]-u[1]*ch], dPA=Math.hypot(a[0]-P[0],a[1]-P[1]);
+      if(y+dPA*slope>=Ht){ fin=finish(P,u,y); break; } y+=dPA*slope; pts.push([a[0],y,a[1]]);
+      const bb=[A[0]+v[0]*ch,A[1]+v[1]*ch], w=nrm([bb[0]-a[0],bb[1]-a[1]]), dab=Math.hypot(bb[0]-a[0],bb[1]-a[1]);   // ease round the corner
+      if(y+dab*slope>=Ht){ fin=finish(a,w,y); break; } y+=dab*slope; pts.push([bb[0],y,bb[1]]); P=bb; }
+    if(!fin) continue; pts.push(...fin);
+    // the whole climb must be clear of every solid and every other rail
+    for(let i=1;i<pts.length-1&&ok;i++){ const a=pts[i], b=pts[i+1], L=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]), m=Math.max(1,Math.ceil(L));
+      for(let j=0;j<m&&ok;j++){ const u=j/m; if(i===pts.length-2&&u>0.35) break; const px=a[0]+(b[0]-a[0])*u, py=a[1]+(b[1]-a[1])*u, pz=a[2]+(b[2]-a[2])*u;
+        if(Math.abs(px)>EDGE-1||Math.abs(pz)>EDGE-1||!riderClear(px,pz,py,0.35)){ ok=false; WRAPWHY.push('solid@'+py.toFixed(0)); }
+        else if(rails.some(o2=>{ if(o2.bb&&(px<o2.bb[0]-2||px>o2.bb[1]+2||pz<o2.bb[2]-2||pz>o2.bb[3]+2)) return false; if(o2.pts.every(q=>q.x>x0-0.7&&q.x<x1+0.7&&q.z>z0-0.7&&q.z<z1+0.7)) return false;   /* the tower's own roof rail is where it tops out */
+          const c=railClosest(o2,{x:px,y:py,z:pz}); return c.d2<4&&Math.abs(c.y-py)<2; })){ ok=false; WRAPWHY.push('rail@'+py.toFixed(0)); } } }
+    if(ok) return pts; }
+  return null; }
+function buildWrap(t,pts){ const rl=addRail(pts,{color:t.sky?0xf2c83a:0x7ff3ff,radius:0.1,posts:false}); rl.lift=true; rl.wrap=true;
+  const cx=(t.r[0]+t.r[1])/2, cz=(t.r[2]+t.r[3])/2;
+  for(let i=1;i<pts.length-2;i++){ const a=new V3(...pts[i]), b=new V3(...pts[i+1]), len=a.distanceTo(b); if(len<0.3) continue;   // a ledge under the rail, tucked against the wall
+    const mid=a.clone().add(b).multiplyScalar(0.5), dir=b.clone().sub(a).setY(0).normalize(); let nx=-dir.z, nz=dir.x; if((cx-mid.x)*nx+(cz-mid.z)*nz<0){ nx=-nx; nz=-nz; }
+    const ld=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.22,len+0.3),WRAPM.ledge); ld.position.set(mid.x+nx*0.45,mid.y-0.45,mid.z+nz*0.45); ld.lookAt(b.x+nx*0.45,b.y-0.45,b.z+nz*0.45); outline(ld,0.03); world.add(ld);
+    for(let q=0;q<len;q+=3.5){ const p=a.clone().lerp(b,q/len); const br=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.7,0.16),WRAPM.bracket); br.position.set(p.x+nx*0.9,p.y-0.85,p.z+nz*0.9); world.add(br); } }
+  const p0=pts[0], p1=pts[1], dl=Math.hypot(p1[0]-p0[0],p1[2]-p0[2]);
+  LIFTS.push({rail:rl,from:0,to:t.h,start:[p1[0],p1[2]],end:[pts[pts.length-2][0],pts[pts.length-2][2]],dir:[(p1[0]-p0[0])/dl,(p1[2]-p0[2])/dl],run:6,wrap:true,tower:t}); t.wrapped=true; }
 function clusterBridges(T){ let n=0; const deck=toon(0x39413c), rampC=0x8fb7a2, used=new Map(), cnt=t=>used.get(t)||0;
   const gr=(a,b)=>addRail([a,b],{color:0xffe23a,radius:0.07,posts:true});
   for(let i=0;i<T.length;i++) for(let j=i+1;j<T.length;j++){ const A=T[i], B=T[j]; if(A.sky||B.sky||cnt(A)>=2||cnt(B)>=2||(A.shape&&A.shape!=='box')||(B.shape&&B.shape!=='box')) continue;   /* only flat box roofs get bridges */
@@ -1795,6 +1840,7 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
     for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const ex=dx>0?x1:dx<0?x0:T.x, ez=dz>0?z1:dz<0?z0:T.z; let g=0;
       for(let q=0.5;q<=9;q+=0.5) if(Math.abs(ground(ex+dx*q,ez+dz*q,y+0.6).h-y)<0.3){ g=q; break; } if(!g) continue;
       const rr=dx?[Math.min(ex,ex+dx*(g+0.5)),Math.max(ex,ex+dx*(g+0.5)),T.z-2,T.z+2]:[T.x-2,T.x+2,Math.min(ez,ez+dz*(g+0.5)),Math.max(ez,ez+dz*(g+0.5))];
+      const W=T.wrapped&&LIFTS.find(l=>l.tower===T); if(W&&W.rail.pts.some(q=>q.y>y-4&&q.x>rr[0]-1.2&&q.x<rr[1]+1.2&&q.z>rr[2]-1.2&&q.z<rr[3]+1.2)) continue;   /* leave the spiral's top lap clear */
       const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.5,pillars:false}); solids[i0].sky=true; } }
   buildSummit(made);
   // Mid Floor vents up to the islands (never from under a deck), cables back down
@@ -1803,9 +1849,11 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T;
       const ex=Math.max(isl.rect[0]-px,0,px-isl.rect[1]), ez=Math.max(isl.rect[2]-pz,0,pz-isl.rect[3]), edge=Math.hypot(ex,ez); if(edge<4||edge>26) continue;
       if(ground(px,pz,y+3).h>y-3) continue;   /* open sky overhead: lifts come up through the gaps between decks */
-      if(LIFTS.some(l=>Math.hypot(l.start[0]-px,l.start[1]-pz)<6||Math.hypot(l.end[0]-px,l.end[1]-pz)<6)) continue; if(tallBlock(px-1.6,px+1.6,pz-1.6,pz+1.6,MIDY+0.3,y+3,true)) continue; cand.push([edge,px,pz]); }
+      if(LIFTS.some(l=>Math.hypot(l.start[0]-px,l.start[1]-pz)<6||Math.hypot(l.end[0]-px,l.end[1]-pz)<6)) continue; if(tallBlock(px-1.6,px+1.6,pz-1.6,pz+1.6,MIDY+0.3,y+3,true)) continue;
+      const chain=LIFTS.some(l=>l.to===MIDY&&Math.hypot(l.end[0]-px,l.end[1]-pz)<24);   /* land off a street lift and the next one up is right there */
+      cand.push([edge-(chain?14:0),px,pz]); }
     cand.sort((p,q)=>p[0]-q[0]);
-    for(const [,px,pz] of cand.slice(0,8)){ const ix=clamp(px,isl.rect[0]+4,isl.rect[1]-4), iz=clamp(pz,isl.rect[2]+4,isl.rect[3]-4);
+    for(const [,px,pz] of cand.slice(0,10)){ const ix=clamp(px,isl.rect[0]+4,isl.rect[1]-4), iz=clamp(pz,isl.rect[2]+4,isl.rect[3]-4);
       if(launchPad(px,pz,MIDY,y,1.4,0xff6fa8,[ix,iz],7)){ isl.vent=true; up++; break; } } }
   LIFT_STRICT=false;
   let down=0; for(const isl of made){ if(down>=4||isl.vent) continue; let tgt=null, bd=1e9;
