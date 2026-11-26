@@ -539,6 +539,32 @@ const SWM=toon(0xc9c4b6,null,{polygonOffset:true,polygonOffsetFactor:-3}), CURB=
 function sidewalk(x0,x1,z0,z1,m=2.6){ const g=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0+2*m,z1-z0+2*m),SWM); g.rotation.x=-Math.PI/2; g.position.set((x0+x1)/2,0.05,(z0+z1)/2); g.receiveShadow=true; world.add(g);
   for(const [cx,cz,ww,dd] of [[(x0+x1)/2,z0-m,x1-x0+2*m,0.25],[(x0+x1)/2,z1+m,x1-x0+2*m,0.25],[x0-m,(z0+z1)/2,0.25,z1-z0+2*m],[x1+m,(z0+z1)/2,0.25,z1-z0+2*m]]){
     const c=new THREE.Mesh(new THREE.BoxGeometry(ww,0.14,dd),CURB); c.position.set(cx,0.07,cz); c.receiveShadow=true; world.add(c); } }
+/* ---- buildings that aren't just boxes: round towers, setback tiers, L / U blocks, wedge (ramp) roofs ---- */
+function tier(x0,x1,z0,z1,bot,top,col){ const h=top-bot, w=x1-x0, d=z1-z0, W=winMat(col), roof=tintMat(col,0.62);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[W,W,roof,roof,W,W]); m.position.set((x0+x1)/2,bot+h/2,(z0+z1)/2); m.castShadow=m.receiveShadow=true;
+  const rw=Math.max(1,Math.round(w/5)), rd=Math.max(1,Math.round(d/5)), rh=Math.max(1,Math.round(h/4)); scaleBoxUV(m.geometry,[rd,rd,undefined,undefined,rw,rw],[rh,rh,1,1,rh,rh]);
+  outline(m,0.08); world.add(m); solids.push({type:'box',x0,x1,z0,z1,top,bot}); return m; }
+function roundTower(cx,cz,R,h,col){ const geo=new THREE.CylinderGeometry(R,R,h,20,1,true), uv=geo.attributes.uv; const su=Math.max(2,Math.round(2*Math.PI*R/5)), sv=Math.max(1,Math.round(h/4));
+  for(let i=0;i<uv.count;i++) uv.setXY(i,uv.getX(i)*su,uv.getY(i)*sv); uv.needsUpdate=true;
+  const m=new THREE.Mesh(geo,winMat(col)); m.position.set(cx,h/2,cz); m.castShadow=m.receiveShadow=true; outline(m,0.1); world.add(m);
+  const cap=new THREE.Mesh(new THREE.CircleGeometry(R,20),tintMat(col,0.62)); cap.rotation.x=-Math.PI/2; cap.position.set(cx,h,cz); world.add(cap);
+  const lip=new THREE.Mesh(new THREE.TorusGeometry(R-0.1,0.18,6,24),tintMat(col,0.8)); lip.rotation.x=Math.PI/2; lip.position.set(cx,h+0.15,cz); world.add(lip);
+  for(const [a,b] of [[0.92,0.38],[0.38,0.92],[0.7,0.7]]) solids.push({type:'box',x0:cx-R*a,x1:cx+R*a,z0:cz-R*b,z1:cz+R*b,top:h});   /* three overlapping boxes ~ a circle */
+  const ring=[]; for(let k=0;k<16;k++){ const t=k/16*Math.PI*2; ring.push([cx+Math.cos(t)*(R-0.5),h+0.07,cz+Math.sin(t)*(R-0.5)]); } addRail(ring,{closed:true,color:0x3fd4ff,radius:0.08});
+  BLD.push({x0:cx-R,x1:cx+R,z0:cz-R,z1:cz+R,h}); }
+/* kind: 'step' | 'L' | 'U' | 'round' | 'wedge' | 'box'; returns the roof heights it made */
+function shapedBuilding(r,h,col,kind){ const [x0,x1,z0,z1]=r, w=x1-x0, d=z1-z0, cx=(x0+x1)/2, cz=(z0+z1)/2;
+  if(kind==='round'&&Math.min(w,d)>=6){ roundTower(cx,cz,Math.min(w,d)/2,h,col); return; }
+  if(kind==='step'&&Math.min(w,d)>=8){ const h1=Math.max(6,Math.round(h*0.5)), h2=Math.round(h*0.78), i1=Math.min(w,d)*0.18, i2=Math.min(w,d)*0.33;
+    building(x0,x1,z0,z1,h1,col); edgeRail(x0,x1,z0,z1,h1,0xffe23a);
+    tier(x0+i1,x1-i1,z0+i1,z1-i1,h1,h2,col); edgeRail(x0+i1,x1-i1,z0+i1,z1-i1,h2,0xff3d8b);
+    tier(x0+i2,x1-i2,z0+i2,z1-i2,h2,h,col); return; }
+  if(kind==='L'&&w>=8&&d>=8){ const xm=x0+w*0.5, zm=z0+d*0.5; building(x0,x1,z0,zm,h,col); building(x0,xm,zm,z1,Math.max(6,h-4-Math.round(rnd()*4)),col); return; }
+  if(kind==='U'&&w>=10&&d>=8){ const a=x0+w*0.33, b=x1-w*0.33, zm=z0+d*0.45; building(x0,a,z0,z1,h,col); building(b,x1,z0,z1,Math.max(6,h-(rnd()<0.5?4:0)),col); building(a,b,z0,zm,Math.max(5,Math.round(h*0.45)),col); return; }
+  if(kind==='wedge'){ building(x0,x1,z0,z1,h,col); const dir=['+x','-x','+z','-z'][Math.floor(rnd()*4)]; ramp(x0,x1,z0,z1,Math.min(3.5,(dir[1]==='x'?w:d)*0.35),dir,false,tintMat(col,0.75).color.getHex(),{y0:h}); return; }
+  building(x0,x1,z0,z1,h,col); }
+const SHAPES=['step','round','L','U','wedge','box'];
+const pickShape=(w,d)=>{ const ok=SHAPES.filter(k=>k==='box'||k==='wedge'||(k==='round'&&Math.min(w,d)>=6&&Math.abs(w-d)<3)||(k==='step'&&Math.min(w,d)>=8)||(k==='L'&&w>=8&&d>=8)||(k==='U'&&w>=10&&d>=8)); return ok[Math.floor(rnd()*ok.length)]; };
 function box(x0,x1,z0,z1,h,mat,ot=0.07){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,h,z1-z0), mat);
   mesh.position.set((x0+x1)/2,h/2,(z0+z1)/2); mesh.castShadow=true; mesh.receiveShadow=true;
@@ -1289,7 +1315,8 @@ function fillBuildings(target){
   for(let k=0;k<target*3&&placed<target;k++){
     const w=7+Math.floor(rnd()*12), d=7+Math.floor(rnd()*12), r=findSpot(w,d,5,300,3,1); if(!r) continue;
     const [x0,x1,z0,z1]=r, h=H[Math.floor(rnd()*H.length)];
-    sidewalk(x0,x1,z0,z1); building(x0,x1,z0,z1,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0,x1,z0,z1,h});
+    const kind=h>=9&&rnd()<0.4?pickShape(w,d):'box'; sidewalk(x0,x1,z0,z1); shapedBuilding(r,h,PAL[Math.floor(rnd()*PAL.length)],kind); FILL.push({x0,x1,z0,z1,h,shape:kind});
+    if(kind!=='box') { placed++; continue; }
     if(h<=11&&rnd()<0.5) edgeRail(x0,x1,z0,z1,h,[0xffe23a,0xff3d8b,0x3fd4ff,0xffffff][Math.floor(rnd()*4)]);
     if(h<=16) roofProps(x0,x1,z0,z1,h);
     if(h<=9&&rnd()<0.5) xc((x0+x1)/2+2,h+1.2,(z0+z1)/2+2);
@@ -1300,7 +1327,7 @@ function fillBuildings(target){
 // skybridges: link filler rooftops that face each other across a gap (flat if level, a ramp if within 4m)
 function skybridges(maxN){ let n=0; const mat=toon(0x39413c);
   for(let i=0;i<FILL.length&&n<maxN;i++) for(let j=i+1;j<FILL.length&&n<maxN;j++){
-    const A=FILL[i], B=FILL[j]; if(A.h<4.5||B.h<4.5||Math.abs(A.h-B.h)>4) continue;
+    const A=FILL[i], B=FILL[j]; if(A.h<4.5||B.h<4.5||Math.abs(A.h-B.h)>4||(A.shape&&A.shape!=='box')||(B.shape&&B.shape!=='box')) continue;
     for(const ax of ['x','z']){ const o=ax==='x'?['z0','z1']:['x0','x1'], lo=Math.max(A[o[0]],B[o[0]]), hi=Math.min(A[o[1]],B[o[1]]); if(hi-lo<5) continue;
       const [L,Rr]=A[ax+'1']<=B[ax+'0']?[A,B]:B[ax+'1']<=A[ax+'0']?[B,A]:[null,null]; if(!L) continue;
       const g0=L[ax+'1'], g1=Rr[ax+'0'], gap=g1-g0; if(gap<5||gap>26) continue;
@@ -1590,8 +1617,8 @@ function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sk
     out.push({x,z,h:SKYY,r,sky:true}); sky++; }
   const HS=[16,18,20,22,24,26,28,30,32,34,36]; let mid=0;
   for(let k=0;k<60&&mid<12;k++){ const w=8+Math.floor(rnd()*6), d=8+Math.floor(rnd()*6), r=findSpot(w,d,4,400,3,1); if(!r) continue; const h=HS[Math.floor(rnd()*HS.length)];
-    sidewalk(...r); building(...r,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0:r[0],x1:r[1],z0:r[2],z1:r[3],h}); roofProps(...r,h); if(rnd()<0.6) edgeRail(...r,h,[0xffe23a,0xff3d8b,0x3fd4ff][Math.floor(rnd()*3)]);
-    out.push({x:(r[0]+r[1])/2,z:(r[2]+r[3])/2,h,r}); mid++; }
+    sidewalk(...r); const kind=pickShape(r[1]-r[0],r[3]-r[2]); shapedBuilding(r,h,PAL[Math.floor(rnd()*PAL.length)],kind); FILL.push({x0:r[0],x1:r[1],z0:r[2],z1:r[3],h,shape:kind}); if(kind==='box'){ roofProps(...r,h); if(rnd()<0.6) edgeRail(...r,h,[0xffe23a,0xff3d8b,0x3fd4ff][Math.floor(rnd()*3)]); }
+    out.push({x:(r[0]+r[1])/2,z:(r[2]+r[3])/2,h,r,shape:kind}); mid++; }
   /* clusters: bud 2-4 neighbours off each tall tower across 3-4m alleys, stepped up and down so you can drop roof to roof */
   let clusters=0, budded=0;
   for(const T0 of out.slice()){ if(T0.h<20||T0.sky||T0.cluster!==undefined) continue; const cid=clusters, Q=[T0]; let n=0;
@@ -1601,8 +1628,9 @@ function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sk
         const nx0=dx>0?x1+al:dx<0?x0-al-w:(sl?x1-w:x0), nz0=dz>0?z1+al:dz<0?z0-al-d:(sl?z1-d:z0), q=[nx0,nx0+w,nz0,nz0+d];   /* flush to either end of the face */
         if(!spotFree(...q,1.0,keep,gates,0.8)) continue;
         const h=Math.max(14,Math.min(34,T.h+[-8,-6,-4,4,6,8][Math.floor(rnd()*6)]));
-        sidewalk(...q,1); building(...q,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0:q[0],x1:q[1],z0:q[2],z1:q[3],h}); if(h<34&&w>=7&&d>=7) roofProps(...q,h); if(rnd()<0.6) edgeRail(...q,h,[0xffe23a,0xff3d8b,0x3fd4ff,0xffffff][n%4]);
-        const B={x:(q[0]+q[1])/2,z:(q[2]+q[3])/2,h,r:q,cluster:cid}; out.push(B); Q.push(B); n++; budded++; } }
+        sidewalk(...q,1); const kind=rnd()<0.45?pickShape(w,d):'box'; shapedBuilding(q,h,PAL[Math.floor(rnd()*PAL.length)],kind); FILL.push({x0:q[0],x1:q[1],z0:q[2],z1:q[3],h,shape:kind});
+        if(kind==='box'){ if(h<34&&w>=7&&d>=7) roofProps(...q,h); if(rnd()<0.6) edgeRail(...q,h,[0xffe23a,0xff3d8b,0x3fd4ff,0xffffff][n%4]); }
+        const B={x:(q[0]+q[1])/2,z:(q[2]+q[3])/2,h,r:q,cluster:cid,shape:kind}; out.push(B); Q.push(B); n++; budded++; } }
     if(n){ T0.cluster=cid; clusters++; } }
   FLOOR.clusters=clusters; FLOOR.budded=budded; FLOOR.clusterBridges=clusterBridges(out);
   return out; }
@@ -1610,7 +1638,7 @@ function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sk
    running down onto the lower roof (or a grind rail when there's no room) -- guard rails on both sides */
 function clusterBridges(T){ let n=0; const deck=toon(0x39413c), rampC=0x8fb7a2, used=new Map(), cnt=t=>used.get(t)||0;
   const gr=(a,b)=>addRail([a,b],{color:0xffe23a,radius:0.07,posts:true});
-  for(let i=0;i<T.length;i++) for(let j=i+1;j<T.length;j++){ const A=T[i], B=T[j]; if(A.sky||B.sky||cnt(A)>=2||cnt(B)>=2) continue;
+  for(let i=0;i<T.length;i++) for(let j=i+1;j<T.length;j++){ const A=T[i], B=T[j]; if(A.sky||B.sky||cnt(A)>=2||cnt(B)>=2||(A.shape&&A.shape!=='box')||(B.shape&&B.shape!=='box')) continue;   /* only flat box roofs get bridges */
     if(A.cluster===undefined&&B.cluster===undefined) continue;
     for(const ax of [0,1]){ const [a0,a1,o0,o1]=ax===0?[0,1,2,3]:[2,3,0,1], lo=Math.max(A.r[o0],B.r[o0]), hi=Math.min(A.r[o1],B.r[o1]); if(hi-lo<2.6) continue;
       const [L,R]=A.r[a1]<=B.r[a0]?[A,B]:B.r[a1]<=A.r[a0]?[B,A]:[null,null]; if(!L) continue;
@@ -2445,7 +2473,7 @@ function crewTargets(){ const T=[{id:MP.id||'me',local:true,pos:P.pos,vel:P.vel,
   for(const p of crewHere()) T.push({id:p.id,local:false,pos:p.R.pos,vel:p.R.vel,grind:!!p.R.grind,air:!p.R.grounded&&!p.R.grind,name:p.name}); return T; }
 function policeHost(){ const ids=[MP.id,...crewHere().map(p=>p.id)].filter(Boolean); return !MP.live||ids.length<2||String(MP.id)===ids.map(String).sort()[0]; }   // lowest id in the district runs the cops
 function hitTarget(T,n,why,push){ if(T.local){ hurt(n,why); if(push){ if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(push[0],push[1],push[2]); } } else mpSend({t:'hit',to:T.id,n,why,push}); }
-const COP_CLIMB=1.8;
+const COP_CLIMB=1.8, COP_CLIMB_SKY=4.5;
 /* where a cop should start climbing to reach the deck/roof under point K: the nearest edge with a clear wall face below it.
    No clear face straight up from where they stand (a deck overhead in the way)? climb onto the Mid Floor first. */
 function copClimbPoint(c,K){ const topOf=s=>s.type==='ramp'?null:s.top;
@@ -2454,7 +2482,7 @@ function copClimbPoint(c,K){ const topOf=s=>s.type==='ramp'?null:s.top;
   const edges=(S)=>{ const out=[], m=0.45; for(const [ex,ez,nx,nz] of [[S.x0-m,null,-1,0],[S.x1+m,null,1,0],[null,S.z0-m,0,-1],[null,S.z1+m,0,1]]){
       const a0=ex==null?S.x0+0.8:S.z0+0.8, a1=ex==null?S.x1-0.8:S.z1-0.8, n=Math.max(1,Math.ceil((a1-a0)/3));   /* points every ~3m along the edge */
       for(let k=0;k<=n;k++){ const u=a0+(a1-a0)*k/n, x=ex??u, z=ez??u; out.push({x,z,ix:-nx,iz:-nz,top:S.top,d:Math.hypot(x-c.pos.x,z-c.pos.z)}); } } return out.sort((a,b)=>a.d-b.d).slice(0,40); };
-  const tryS=(S)=>{ if(!S||S.x1-S.x0<1.6||S.z1-S.z0<1.6) return null; for(const e of edges(S)){ if(e.d>90) continue; const base=ground(e.x,e.z,c.y+0.6).h; if(Math.abs(base-c.y)>1.2||blocked(e.x,e.z,base)) continue; if(colClear(e.x,e.z,base,S.top)){ e.base=base; return e; } } return null; };
+  const tryS=(S)=>{ if(!S||S.x1-S.x0<1.6||S.z1-S.z0<1.6) return null; for(const e of edges(S)){ if(e.d>90||(c.cpBad||[]).some(b=>Math.hypot(b[0]-e.x,b[1]-e.z)<3)) continue; const base=ground(e.x,e.z,c.y+0.6).h; if(Math.abs(base-c.y)>1.2||blocked(e.x,e.z,base)) continue; if(colClear(e.x,e.z,base,S.top)){ e.base=base; return e; } } return null; };
   let S=support(K.x,K.z,K.y), cp=tryS(S); if(cp) return cp;
   if(c.y<MIDY-1&&K.y>MIDY+2){ const mids=solids.filter(s=>s.floor&&s.type==='box'&&Math.abs(s.top-MIDY)<0.1).sort((a,b)=>Math.hypot((a.x0+a.x1)/2-c.pos.x,(a.z0+a.z1)/2-c.pos.z)-Math.hypot((b.x0+b.x1)/2-c.pos.x,(b.z0+b.z1)/2-c.pos.z));
     for(const M of mids.slice(0,6)){ cp=tryS(M); if(cp) return cp; } }
@@ -2565,12 +2593,14 @@ function updatePolice(dt){
           if(dist<1.9&&Math.abs(TP.y-c.y)<2&&!(T.local&&(P.invuln>0||P.knock>0))&&!(c.hitCd>clock)){ c.hitCd=clock+1.5; hitTarget(T,26,'BODY SLAMMED!',[dx/dist*10,6,dz/dist*10]); c.charge=0; } continue; }
         if(c.see&&dist<16&&dist>4&&c.chargeCd<=0){ c.chargeCd=6+Math.random()*3; c.charge=0.75; c.yaw=Math.atan2(dx,dz); popup('INCOMING!','bad'); blip(120,0.3,'sawtooth',0.1,60); continue; }
         if(c.callCd<=0&&PDRONES.length<3){ c.callCd=14; lastKnown=TP.clone(); launchDrone(c); } } }
-    if(c.climb){ const k=c.climb; c.y=Math.min(k.top,c.y+COP_CLIMB*dt); g.position.set(c.pos.x,c.y,c.pos.z); g.rotation.y=c.yaw=k.yaw;   /* scaling a wall: slow, hand over hand */
+    if(c.climb){ const k=c.climb; c.y=Math.min(k.top,c.y+(k.v||COP_CLIMB)*dt); g.position.set(c.pos.x,c.y,c.pos.z); g.rotation.y=c.yaw=k.yaw;   /* scaling a wall: slow, hand over hand */
       const sw=Math.sin(clock*7+i); c.armL.rotation.x=-2.6+sw*0.5; c.armR.rotation.x=-2.6-sw*0.5; c.legL.rotation.x=sw*0.6; c.legR.rotation.x=-sw*0.6;
       if(c.y>=k.top-0.01){ c.pos.x+=k.ix*1.3; c.pos.z+=k.iz*1.3; c.y=ground(c.pos.x,c.pos.z,k.top+0.6).h; c.climb=null; c.cp=null; } continue; }
     if(c.kind!=='boss'&&!c.leave&&heat>0&&lastKnown&&lastKnown.y>c.y+2.5){   /* you've been spotted up high: head for an edge and climb */
-      if(!c.cp||c.cp.k.distanceTo(lastKnown)>4||(c.cpT=(c.cpT||0)+dt)>12){ c.cp=copClimbPoint(c,lastKnown); c.cpT=0; if(c.cp) c.cp.k=lastKnown.clone(); }
-      if(c.cp){ const ex=c.cp.x-c.pos.x, ez=c.cp.z-c.pos.z; if(Math.hypot(ex,ez)<0.9&&Math.abs(c.y-c.cp.base)<1.5){ c.pos.x=c.cp.x; c.pos.z=c.cp.z; c.climb={top:c.cp.top,ix:c.cp.ix,iz:c.cp.iz,yaw:Math.atan2(c.cp.ix,c.cp.iz)}; c.see=false;
+      if(!c.cp||c.cp.k.distanceTo(lastKnown)>4||(c.cpT=(c.cpT||0)+dt)>12){ c.cp=copClimbPoint(c,lastKnown); c.cpT=0; c.cpBestD=1e9; c.cpNoGo=0; if(c.cp) c.cp.k=lastKnown.clone(); }
+      if(c.cp){ const dcp=Math.hypot(c.cp.x-c.pos.x,c.cp.z-c.pos.z);   /* no headway toward the climb spot (a wall in the way)? write it off and pick another */
+        if(dcp<(c.cpBestD??1e9)-0.5){ c.cpBestD=dcp; c.cpNoGo=0; } else if((c.cpNoGo=(c.cpNoGo||0)+dt)>2.5){ (c.cpBad??=[]).push([c.cp.x,c.cp.z]); if(c.cpBad.length>12) c.cpBad.shift(); c.cp=copClimbPoint(c,lastKnown); if(c.cp) c.cp.k=lastKnown.clone(); c.cpBestD=1e9; c.cpNoGo=0; } }
+      if(c.cp){ const ex=c.cp.x-c.pos.x, ez=c.cp.z-c.pos.z; if(Math.hypot(ex,ez)<0.9&&Math.abs(c.y-c.cp.base)<1.5){ c.pos.x=c.cp.x; c.pos.z=c.cp.z; c.climb={top:c.cp.top,ix:c.cp.ix,iz:c.cp.iz,yaw:Math.atan2(c.cp.ix,c.cp.iz),v:lastKnown.y>=SKYY-6?COP_CLIMB_SKY:COP_CLIMB};   /* chasing you up to the Sky Floor they climb much faster */ c.see=false;
           if(alertMsgT<=0&&T.local){ alertMsgT=8; popup('COPS ARE CLIMBING UP!','bad'); } continue; } } }
     else if(c.cp) c.cp=null;
     let tgt=c.kind?TP:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.cp?new V3(c.cp.x,c.y,c.cp.z):c.see?TP:(lastKnown||(heat>0?P.dispatch:null));
