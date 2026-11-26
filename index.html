@@ -1546,8 +1546,7 @@ function spire(){ const r=findSpotHard(14,31,3); if(!r) return false; const [X0,
   xc(cx-3,15.2,sz1+3); xc(sx1-2,21.2,sz1+1.2);
   pushLayerTag([sx1-2,22.1,sz1+5.4,0,0,-1,0,1],{near:[cx,cz,40],ymin:12});                                // L2 piece on the side block
   // sky decks (L3): toward the city centre, floating, linked by downhill rails
-  const dir=new V3(-cx,0,-cz).normalize(), side=new V3(-dir.z,0,dir.x), deck=(c,y,col)=>{ slab(c.x-5,c.x+5,c.z-5,c.z+5,y,toon(col),{th:0.8,pillars:false}); solids[solids.length-1].sky=true;
-    const glow=new THREE.Mesh(new THREE.CircleGeometry(5.6,24),new THREE.MeshBasicMaterial({color:0x7ff3ff,transparent:true,opacity:0.25,depthWrite:false})); glow.rotation.x=Math.PI/2; glow.position.set(c.x,y-0.85,c.z); world.add(glow); };
+  const dir=new V3(-cx,0,-cz).normalize(), side=new V3(-dir.z,0,dir.x), deck=(c,y,col)=>{ slab(c.x-5,c.x+5,c.z-5,c.z+5,y,toon(col),{th:0.8,pillars:false}); solids[solids.length-1].sky=true; };
   const S1=new V3(cx,0,cz).addScaledVector(dir,17), S2=S1.clone().addScaledVector(dir,26).addScaledVector(side,8), S3=S2.clone().addScaledVector(dir,24).addScaledVector(side,-14);
   for(const S of [S1,S2,S3]){ S.x=clamp(S.x,-EDGE+12,EDGE-12); S.z=clamp(S.z,-EDGE+12,EDGE-12); }
   deck(S1,50,0x39413c); deck(S2,48,0x4a3f7a); deck(S3,46,0x39413c);
@@ -1667,7 +1666,6 @@ const SKYM={ under:toon(0x2a2738), truss:metal(0x3a3f4a), ac:metal(0xb8bcc4), ta
    guard rails on the corners (bridge mouths stay open), AC units and a tapered underside so it reads as architecture */
 function skyRooftop(cx,cz,S,y,n,pal,isl){ const h=S/2, sx=(n&1)?1:-1, sz=(n&2)?1:-1, B=Math.round(S*0.32), T=4;
   const under=new THREE.Mesh(new THREE.ConeGeometry(h*1.414,14,4,1),SKYM.under); under.rotation.set(Math.PI,Math.PI/4,0); under.position.set(cx,y-1.2-7,cz); outline(under,0.1); world.add(under);
-  const glow=new THREE.Mesh(new THREE.CircleGeometry(S*0.5,24),new THREE.MeshBasicMaterial({color:0x7ff3ff,transparent:true,opacity:0.18,depthWrite:false})); glow.rotation.x=Math.PI/2; glow.position.set(cx,y-15.5,cz); world.add(glow);
   // penthouse tier in one corner, reached by a ramp from the middle
   const px0=sx>0?cx+h-2-B:cx-h+2, pz0=sz>0?cz+h-2-B:cz-h+2, P0=[px0,px0+B,pz0,pz0+B];
   box2(...P0,y,y+T,toon(pal[1])); edgeRail(...P0,y+T,0xffe23a);
