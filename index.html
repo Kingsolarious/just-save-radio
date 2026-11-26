@@ -1588,6 +1588,19 @@ function cityTowers(){ const keep=keepZones(), gates=gateBoxes(), out=[]; let sk
   for(let k=0;k<60&&mid<12;k++){ const w=8+Math.floor(rnd()*6), d=8+Math.floor(rnd()*6), r=findSpot(w,d,4,400,3,1); if(!r) continue; const h=HS[Math.floor(rnd()*HS.length)];
     sidewalk(...r); building(...r,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0:r[0],x1:r[1],z0:r[2],z1:r[3],h}); roofProps(...r,h); if(rnd()<0.6) edgeRail(...r,h,[0xffe23a,0xff3d8b,0x3fd4ff][Math.floor(rnd()*3)]);
     out.push({x:(r[0]+r[1])/2,z:(r[2]+r[3])/2,h,r}); mid++; }
+  /* clusters: bud 2-4 neighbours off each tall tower across 3-4m alleys, stepped up and down so you can drop roof to roof */
+  let clusters=0, budded=0;
+  for(const T0 of out.slice()){ if(T0.h<20||T0.sky||T0.cluster!==undefined) continue; const cid=clusters, Q=[T0]; let n=0;
+    while(Q.length&&n<6){ const T=Q.shift();
+      for(const [dx,dz,sl] of [[1,0,0],[0,1,0],[-1,0,0],[0,-1,0],[1,0,1],[0,1,1],[-1,0,1],[0,-1,1],[1,1,0],[-1,-1,0]]){ if(n>=6) break;
+        const w=5+Math.floor(rnd()*4), d=5+Math.floor(rnd()*4), al=2.5+rnd()*1.5, [x0,x1,z0,z1]=T.r;
+        const nx0=dx>0?x1+al:dx<0?x0-al-w:(sl?x1-w:x0), nz0=dz>0?z1+al:dz<0?z0-al-d:(sl?z1-d:z0), q=[nx0,nx0+w,nz0,nz0+d];   /* flush to either end of the face */
+        if(!spotFree(...q,1.0,keep,gates,0.8)) continue;
+        const h=Math.max(14,Math.min(34,T.h+[-8,-6,-4,4,6,8][Math.floor(rnd()*6)]));
+        sidewalk(...q,1); building(...q,h,PAL[Math.floor(rnd()*PAL.length)]); FILL.push({x0:q[0],x1:q[1],z0:q[2],z1:q[3],h}); if(h<34&&w>=7&&d>=7) roofProps(...q,h); if(rnd()<0.6) edgeRail(...q,h,[0xffe23a,0xff3d8b,0x3fd4ff,0xffffff][n%4]);
+        const B={x:(q[0]+q[1])/2,z:(q[2]+q[3])/2,h,r:q,cluster:cid}; out.push(B); Q.push(B); n++; budded++; } }
+    if(n){ T0.cluster=cid; clusters++; } }
+  FLOOR.clusters=clusters; FLOOR.budded=budded;
   return out; }
 function buildMidFloor(){ const T=12, y=MIDY, O=-EDGE+6, N=Math.floor((2*EDGE-12)/T), occ=[], keep=D.tags.filter(t=>t[1]>7&&t[1]<18).map(t=>[t[0],t[2]]);   // only tags up at this height clash
   const bigRamps=solids.filter(q=>q.type==='ramp'&&q.h+q.y0>=3.4&&!q.floor).map(q=>[q.x0-4,q.x1+4,q.z0-4,q.z1+4]);   // vert ramps and tall launches keep open sky
