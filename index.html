@@ -25,7 +25,7 @@
   /* everything on screen scales with the viewport (--ui is set from JS): about half size on a landscape phone, 1 on desktop */
   #hud > *, .screen > *, #mphud, #padtoast, #lockon > * { zoom:var(--ui,1); }
   .screen { overflow-y:auto; justify-content:safe center; }
-  @media (max-height:520px){ .screen { gap:8px; } #title .row > div[style] { display:grid !important; grid-template-columns:1fr 1fr; gap:8px !important; } }
+  @media (max-height:520px){ .screen { gap:8px; } #pause { display:grid; grid-template-columns:1fr 1fr; align-content:center; justify-items:stretch; padding:12px max(16px, calc(50vw - 280px)); } #pause .logo, #pause .sub, #pause #presume { grid-column:1 / -1; } #title .row > div[style] { display:grid !important; grid-template-columns:1fr 1fr; gap:8px !important; } }
   #score-box { position:absolute; left:18px; top:16px; }
   #score-box .lbl { font-size:12px; letter-spacing:2px; color:var(--lime); }
   #score { font-size:30px; line-height:1; }
@@ -3839,11 +3839,11 @@ async function toggleFullscreen(){ const d=document.documentElement;
   try{ if(!fsEl()){ await (d.requestFullscreen?d.requestFullscreen({navigationUI:'hide'}):d.webkitRequestFullscreen&&d.webkitRequestFullscreen());
       try{ await screen.orientation.lock('landscape'); }catch(e){} }                       // phones: hold landscape while fullscreen
     else await (document.exitFullscreen?document.exitFullscreen():document.webkitExitFullscreen&&document.webkitExitFullscreen()); }
-  catch(e){ padToast(/iPhone|iPad/.test(navigator.userAgent)?'ON IPHONE: SHARE → ADD TO HOME SCREEN FOR FULLSCREEN':'FULLSCREEN ISN\'T AVAILABLE HERE'); } }
+  catch(e){ const app=matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches; padToast(app?'THE APP IS ALREADY FULL SCREEN':/iPhone|iPad/.test(navigator.userAgent)?'ON IPHONE: SHARE → ADD TO HOME SCREEN FOR FULLSCREEN':'FULLSCREEN ISN\'T AVAILABLE HERE'); } }
 const fsLabel=()=>{ for(const id of ['fsbtn','pfs']) $(id).textContent=fsEl()?'EXIT FULLSCREEN':'FULLSCREEN'; };
 document.addEventListener('fullscreenchange',fsLabel); document.addEventListener('webkitfullscreenchange',fsLabel);
 $('fsbtn').onclick=toggleFullscreen; $('pfs').onclick=toggleFullscreen;
-if(matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) for(const id of ['fsbtn','pfs']) $(id).classList.add('hidden');   // the installed app is already fullscreen
+/* the fullscreen buttons stay on the title and pause menus everywhere, the installed app included (Android can still hide its bars) */
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')) navigator.serviceWorker.register('sw.js').catch(()=>{});
 $('charbtn').onclick=()=>{ const i=CHARS.findIndex(c=>c.id===CHAR); selectCharacter(CHARS[(i+1)%CHARS.length].id); blip(880,0.06,'square',0.06); };
 if(SUPA){ $('mpserverrow').classList.add('hidden'); $('mpcoderow').classList.remove('hidden'); try{ $('mpcode').value=localStorage.getItem('inkline_code')||''; }catch(e){} }
