@@ -181,7 +181,7 @@
     <span><b>WASD</b></span><span>Skate · <b>F</b> drift · <b>Q</b> / <b>S</b> powerslide</span>
     <span><b>MOUSE / ARROWS</b></span><span>Camera</span>
     <span><b>SPACE</b></span><span>Jump (hold = higher) · tap again in the air to flip (on rails too) · tap right before landing: Perfect Landing</span>
-    <span><b>SHIFT</b></span><span>Boost. Clean landings, transfers and combos refill it</span>
+    <span><b>SHIFT</b></span><span>Boost. Grinding fills it; it drains when your combo ends. Grind long for a 2x GRIND RUSH</span>
     <span><b>J · K · L</b></span><span>Air tricks: J spin · K grab · L kick · SPACE flip. Press two together for combo tricks (14 in all)</span>
     <span><b>WALLS & RAILS</b></span><span>Jump alongside a wall to wall-ride; land near rails to grind; steer at junctions to branch</span>
     <span><b>E / RMB</b></span><span>Hold near a marker, then flick the arrows shown (mouse, arrow keys)</span>
@@ -569,10 +569,12 @@ function insideSolid(p){ for(const s of solids){ if(s.bot!==undefined&&p.y<s.bot
 
 // ---------------------------------------------------------------- rails
 const railMats={};
-function addRail(points,{closed=false,color=0xffe23a,posts=false,radius=0.08,postEvery=1}={}){
+function addRail(points,{closed=false,color=0xffe23a,posts=false,radius=0.08,postEvery=1,hidden=false}={}){
   const pts=points.map(a=>new V3(...a)); if(closed) pts.push(pts[0].clone());
   const cum=[0],seg=[]; for(let i=0;i<pts.length-1;i++){ const L=pts[i].distanceTo(pts[i+1]); seg.push(L); cum.push(cum[i]+L); }
   const r={pts,cum,seg,len:cum[cum.length-1],closed,radius}; rails.push(r);
+  r.bb=[Math.min(...pts.map(q=>q.x)),Math.max(...pts.map(q=>q.x)),Math.min(...pts.map(q=>q.z)),Math.max(...pts.map(q=>q.z))];
+  if(hidden){ r.edge=true; return r; }   // coping: grindable edge with no visible pipe
   const mat=railMats[color]??=metal(color), postMat=railMats['post']??=metal(0x39413c);
   const up=new V3(0,1,0);
   for(let i=0;i<pts.length-1;i++){
@@ -1245,7 +1247,7 @@ function roofProps(x0,x1,z0,z1,h){ const w=x1-x0, d=z1-z0; if(w<7||d<7) return;
 }
 const FILL=[];
 function fillBuildings(target){
-  const H=[3,4.5,6,7.5,9,11,13,16,20,24]; let placed=0;
+  const H=[3,4.5,6,7.5,9,11,13,16,20,24,28,34,40]; let placed=0;
   for(let k=0;k<target*3&&placed<target;k++){
     const w=7+Math.floor(rnd()*12), d=7+Math.floor(rnd()*12), r=findSpot(w,d,5,300,3,1); if(!r) continue;
     const [x0,x1,z0,z1]=r, h=H[Math.floor(rnd()*H.length)];
@@ -1396,6 +1398,55 @@ function updateTraffic(dt){
       if(c.v>3&&P.invuln<=0&&P.knock<=0){ bail(); P.invuln=1.8; P.vel.set(fz*push*6+fx*c.v*0.6,4,-fx*push*6+fz*c.v*0.6); popup('TRAFFIC!','bad'); honk(); c.honk=2; } }
   }
 }
+
+// ---------------------------------------------------------------- skatepark city: mega ramps, billboards, poles + wires, curb fences, coping everywhere
+function megaRamps(){ let n=0;
+  // mega quarter pipe: 7m vert wall with a deck and coping
+  for(let k=0;k<1;k++){ const ax=rnd()<0.5, r=findSpot(ax?16:13,ax?13:16,6,1500,2); if(!r) continue; const [x0,x1,z0,z1]=r;
+    if(ax){ ramp(x0,x1,z0,z0+9,7,'+z',true,0x39a6b8); box(x0,x1,z0+9,z1,7,toon(0x39413c),0.08); addRail([[x0+0.3,7.08,z0+9.05],[x1-0.3,7.08,z0+9.05]],{color:0xc8ccd8,radius:0.1}); SKATEZ.push([x0-6,x1+6,z0-24,z1+6]); }
+    else { ramp(x0,x0+9,z0,z1,7,'+x',true,0x39a6b8); box(x0+9,x1,z0,z1,7,toon(0x39413c),0.08); addRail([[x0+9.05,7.08,z0+0.3],[x0+9.05,7.08,z1-0.3]],{color:0xc8ccd8,radius:0.1}); SKATEZ.push([x0-24,x1+6,z0-6,z1+6]); }
+    xc((x0+x1)/2,8.2,(z0+z1)/2); n++; }
+  // mega kicker: 12m run-up, 20m ramp to 6m, open landing
+  for(let k=0;k<1;k++){ const ax=rnd()<0.5, L=56, W=8, r=findSpot(ax?L:W,ax?W:L,4,1500,2); if(!r) continue; const [x0,x1,z0,z1]=r;
+    if(ax) ramp(x0+12,x0+32,z0,z1,6,'+x',false,0xf2a52f); else ramp(x0,x1,z0+12,z0+32,6,'+z',false,0xf2a52f);
+    SKATEZ.push([x0-4,x1+4,z0-4,z1+4]); n++; }
+  return n; }
+const ADS=[['FIZZ','#e94b42','#fff6e0'],['KRYX FM','#39c5d6','#1b1724'],['SKATE OR DYE','#d9e84b','#1b1724'],['NEON NOODLE','#ff6fa8','#fff6e0'],['ZOOM SHOES','#f2a52f','#1b1724'],['BOLT COLA','#b48cff','#fff6e0']];
+function billboards(n){ let placed=0;
+  for(let k=0;k<n*4&&placed<n;k++){ const ax=rnd()<0.5, W=9, T=0.6, r=findSpot(ax?W:T,ax?T:W,3,200,1.5); if(!r) continue; const [x0,x1,z0,z1]=r, cx=(x0+x1)/2, cz=(z0+z1)/2;
+    const ad=ADS[Math.floor(rnd()*ADS.length)], tex=marqueeTex(ad[0],ad[1],ad[2],512,224), face=new THREE.MeshBasicMaterial({map:tex}), edge=toon(0x2a2738);
+    const mats=ax?[edge,edge,edge,edge,face,face]:[face,face,edge,edge,edge,edge];
+    const b=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,4.5,z1-z0),mats); b.position.set(cx,4.25,cz); b.castShadow=true; outline(b,0.06); world.add(b);
+    solids.push({type:'box',x0,x1,z0,z1,top:6.5,bot:2,wallride:true});
+    for(const k2 of [-1,1]){ const px=ax?cx+k2*3:cx, pz=ax?cz:cz+k2*3; const pl=new THREE.Mesh(new THREE.BoxGeometry(0.3,2,0.3),metal(0x6a6f7a)); pl.position.set(px,1,pz); world.add(pl);
+      solids.push({type:'box',x0:px-0.15,x1:px+0.15,z0:pz-0.15,z1:pz+0.15,top:2}); }
+    addRail(ax?[[x0+0.2,6.56,cz],[x1-0.2,6.56,cz]]:[[cx,6.56,z0+0.2],[cx,6.56,z1-0.2]],{color:0xe8e1c7,radius:0.07});
+    placed++; }
+  return placed; }
+function streetFurniture(){ const poleM=toon(0x5a4632), wireOpt={color:0x1b1b22,radius:0.035}, fenceOpt={color:0xb8bcc6,radius:0.05,posts:true,postEvery:1};
+  for(const r of ROADS){ if(r.ring) continue; const cuts=r.cuts||[], mid=(r.a0+r.a1)/2, len=r.a1-r.a0;
+    const gaps=cuts.map(k=>[k-RW-SW-0.6,k+RW+SW+0.6]); if(len>70&&!cuts.some(k=>Math.abs(k-mid)<14)) gaps.push([mid-3,mid+3]);
+    const pieces=gaps.reduce((ps,[g0,g1])=>ps.flatMap(([a,b])=>g1<=a||g0>=b?[[a,b]]:[[a,g0],[g1,b]]),[[r.a0+1,r.a1-1]]).filter(([a,b])=>b-a>=5);
+    const P3=(u,off,y)=>r.axis==='x'?[u,y,r.c+off]:[r.c+off,y,u];
+    for(const [a,b] of pieces){
+      // grindable fence along both curbs
+      for(const sd of [-1,1]){ const pts=[]; for(let u=a;u<=b+0.01;u+=Math.min(3,(b-a))) pts.push(P3(Math.min(u,b),sd*(RW+0.2),0.9)); if(pts.length>=2) addRail(pts,fenceOpt); }
+      // telephone poles on one side with grindable wires strung between them
+      const tops=[]; for(let u=a+2;u<=b-2;u+=26){ if(LAMPS.some(([lx,lz])=>Math.hypot(lx-P3(u,0,0)[0],lz-P3(u,0,0)[2])<4)) u+=4; if(u>b-2) break;
+        const [px,,pz]=P3(u,RW+SW-0.25,0); const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.16,7.8,7),poleM); pole.position.set(px,3.9,pz); pole.castShadow=true; outline(pole,0.03); world.add(pole);
+        const bar=new THREE.Mesh(new THREE.BoxGeometry(r.axis==='x'?0.15:1.6,0.15,r.axis==='x'?1.6:0.15),poleM); bar.position.set(px,7.4,pz); world.add(bar);
+        solids.push({type:'box',x0:px-0.16,x1:px+0.16,z0:pz-0.16,z1:pz+0.16,top:7.8}); tops.push([px,7.25,pz]); }
+      if(tops.length>=2) addRail(tops,wireOpt); } } }
+// coping: every top edge in the city is grindable (roofs, ledges, decks, containers, props) -- invisible rails linked corner to corner
+function copingEverywhere(){ let n=0; const bkey=new Set(BLD.map(b=>[b.x0,b.x1,b.z0,b.z1].map(v=>v.toFixed(2)).join(',')));
+  const near=(a,b,y)=>{ const m=new V3((a[0]+b[0])/2,y,(a[1]+b[1])/2); for(const r of rails){ if(r.edge) continue; if(r.bb&&(m.x<r.bb[0]-1||m.x>r.bb[1]+1||m.z<r.bb[2]-1||m.z>r.bb[3]+1)) continue; const c=railClosest(r,m); if(c.d2<0.7*0.7&&Math.abs(c.y-y)<0.9) return true; } return false; };
+  const edges=(x0,x1,z0,z1,y,ins)=>{ const A=[x0+ins,z0+ins],B=[x1-ins,z0+ins],C=[x1-ins,z1-ins],Dd=[x0+ins,z1-ins];
+    for(const [a,b] of [[A,B],[B,C],[C,Dd],[Dd,A]]){ if(Math.hypot(b[0]-a[0],b[1]-a[1])<1) continue; if(near(a,b,y)) continue; addRail([[a[0],y,a[1]],[b[0],y,b[1]]],{hidden:true}); n++; } };
+  for(const b of BLD){ if(b.h>34||Math.abs(b.x0)>EDGE||Math.abs(b.x1)>EDGE||Math.abs(b.z0)>EDGE||Math.abs(b.z1)>EDGE) continue; edges(b.x0,b.x1,b.z0,b.z1,b.h+0.47,0.15); }
+  for(const s of solids){ if(s.type!=='box'||s.top<0.45||s.top>34) continue; const w=s.x1-s.x0, d=s.z1-s.z0; if(Math.min(w,d)<0.5||Math.max(w,d)<1.6) continue;
+    if(Math.abs(s.x0)>EDGE||Math.abs(s.z0)>EDGE) continue; if(bkey.has([s.x0,s.x1,s.z0,s.z1].map(v=>v.toFixed(2)).join(','))) continue;
+    if(s.bot!==undefined&&s.top-s.bot>3&&!s.wallride) continue; edges(s.x0,s.x1,s.z0,s.z1,s.top+0.03,0.05); }
+  return n; }
 // building chains: 2-3 blocks in a row stepping up, joined by skybridges (flat) or ramp-bridges -- instant rooftop layers
 function chainBlock(){ let n,w,d,g,alongX,r=null;
   for(let at=0;at<4&&!r;at++){ n=at<2?2+Math.floor(rnd()*2):2; w=(at<2?9:7)+Math.floor(rnd()*4); d=(at<2?10:8)+Math.floor(rnd()*4); g=6+Math.floor(rnd()*(at<2?6:3)); alongX=rnd()<0.5;
@@ -1502,7 +1553,9 @@ const ROADN=buildRoads();
 const EXTRA_TAGS=4;   // per district: three hidden courtyards + the third compound's tunnel
 const COURTS=[0,1,2].map(()=>{ let ok=courtyard('push'); if(!ok){ IGNORE_SKATE=true; ok=courtyard('push'); IGNORE_SKATE=false; } return ok; });
 const CHAINS=Array.from({length:6},()=>chainBlock()).filter(Boolean).length;
+const MEGA=megaRamps();
 const FILLERS=fillBuildings(22), BRIDGES=skybridges(10), PROPS=streetProps(45), CARS=spawnTraffic();
+const BILLS=billboards(6); streetFurniture();
 // ====================================================================== TUNNEL GATES (districts link into one city)
 // Each district has a gate to each other district. Skate in -> loading-tunnel ride -> skate out of the matching gate.
 const GATES=[];
@@ -1640,6 +1693,7 @@ function mergeStatic(root){
     const m=new THREE.Mesh(geo,mat); m.castShadow=b.cast; m.receiveShadow=b.recv; m.matrixAutoUpdate=false; root.add(m);
   }
 }
+const COPING=copingEverywhere();
 mergeStatic(world); mergeStatic(scene.userData.skyDeco);
 renderer.compile(scene,camera);
 
@@ -2276,7 +2330,7 @@ function completeTag(t){
 
 // ====================================================================== MOVEMENT (MovementController, MomentumEngine, GrindSystem, WallRideSystem)
 const tmp=new V3(), tmp2=new V3();
-const WALLS=solids.filter(s=>s.type==='box'&&s.bot===undefined&&Math.max(s.x1-s.x0,s.z1-s.z0)>=3&&Math.min(s.x1-s.x0,s.z1-s.z0)>=0.8&&s.top>=4);
+const WALLS=solids.filter(s=>s.type==='box'&&(s.bot===undefined||s.wallride)&&Math.max(s.x1-s.x0,s.z1-s.z0)>=3&&Math.min(s.x1-s.x0,s.z1-s.z0)>=0.8&&s.top>=4);
 function moveInput(){
   let f=(held('f')?1:0)-(held('b')?1:0)-pad.my, r=(held('r')?1:0)-(held('l')?1:0)+pad.mx;
   const m=Math.min(1,Math.hypot(f,r)); if(m<0.05) return {x:0,z:0,m:0,f:0,r:0};
@@ -2308,7 +2362,7 @@ function land(g){
 }
 function finishTrick(){ const t=P.trick; P.trick=null; trick(t.name,t.pts); }
 function startGrind(r,s){
-  rumble(0.15,0.45,140);
+  rumble(0.15,0.45,140); { const q=railPt(r,s,new V3()); (P.snapOff??=new V3()).add(P.pos.clone().sub(q)).clampLength(0,2.5); }   // ease the body onto the rail instead of teleporting
   const T=railTan(r,s,tmp); const dir=(P.vel.x*T.x+P.vel.z*T.z)>=0?1:-1;
   P.grind={r,s,dir,speed:Math.max(Math.hypot(P.vel.x,P.vel.z),9)}; P.vel.y=0; P.qpAir=null; P.grounded=false; P.dashUsed=false; P.landTried=false; P.landWin=0;
   if(P.trick) finishTrick();
@@ -2320,12 +2374,15 @@ function startGrind(r,s){
   const sw=P.stance<0;
   trick((sw?'Switch ':'')+(r===loopRail?D.railName:'Grind'),(r===loopRail?120:60)+(sw?40:0)); sfx.grind();
 }
-function endGrind(){ P.boost=Math.min(100,P.boost+Math.min(12,(P.grindT||0)*5)); P.grindT=0; P.lastRail=P.grind.r; P.noSame=0.35; P.grind=null; P.grounded=false; P.airTime=0; P.lastGrindEnd=clock; }
+function endGrind(){ if(P.rush){ P.rushT=1.6; P.rush=false; } P.boost=Math.min(100,P.boost+Math.min(12,(P.grindT||0)*5)); P.grindT=0; P.lastRail=P.grind.r; P.noSame=0.35; P.grind=null; P.grounded=false; P.airTime=0; P.lastGrindEnd=clock; }
 function trySnapRail(){
   if(P.noGrind>0||P.vel.y>0.5) return;
   const mag=held('magnet'), R1=mag?2.2:1.35, dyMax=mag?3:2.2;
-  for(const r of rails){ if(r===P.lastRail&&P.noSame>0) continue; const c=railClosest(r,P.pos);
-    if(c.d2<R1*R1){ const dy=P.pos.y-c.y; if(dy>-0.5&&dy<dyMax){ startGrind(r,c.s); return; } } }
+  let best=null, bs=1e9;   // the nearest rail wins (height counts too), so crowded junctions catch the right one
+  for(const r of rails){ if(r===P.lastRail&&P.noSame>0) continue; if(r.bb&&(P.pos.x<r.bb[0]-R1||P.pos.x>r.bb[1]+R1||P.pos.z<r.bb[2]-R1||P.pos.z>r.bb[3]+R1)) continue;
+    const c=railClosest(r,P.pos); if(c.d2>=R1*R1) continue; const dy=P.pos.y-c.y; if(dy<=-0.5||dy>=dyMax) continue;
+    const sc=c.d2+(dy<0?dy*dy*4:dy*dy*0.35); if(sc<bs){ bs=sc; best={r,s:c.s}; } }
+  if(best) startGrind(best.r,best.s);
 }
 // a rail that touches point p (used for seamless links + branches)
 function railAt(p,exclude,maxD=1.1){ let best=null; for(const r of rails){ if(r===exclude) continue; const c=railClosest(r,p); if(c.d2<maxD*maxD&&Math.abs(p.y-c.y)<0.7&&(!best||c.d2<best.d2)) best={r,s:c.s,d2:c.d2}; } return best; }
@@ -2336,7 +2393,9 @@ function grindStep(h,jump,trk,boosting,inp){
   g.speed-=CFG.SLOPE*0.5*T.y*g.dir*h;
   if(boosting){ g.speed=Math.min(CFG.BOOST+FLOW.state*1.5+2,g.speed+25*h); P.boost=Math.max(0,P.boost-26*h); }
   if(held('brake')) g.speed-=18*h;
-  g.speed=clamp(g.speed,6,32); g.s+=g.dir*g.speed*h;
+  if(P.grindT>2.5&&!P.rush){ P.rush=true; popup('GRIND RUSH x2','big'); rumble(0.5,0.8,260); sfx.flowUp&&sfx.flowUp(3); flowAdd(10); }
+  if(P.rush){ g.speed=Math.min(40,g.speed+16*h); C.pts+=45*h; if(Math.random()<0.8) emit(P.pos.clone(),rv(4).setY(3),0x7ff3ff,0.4,0.14,10); }   // long grinds kick into a 2x rush: faster, double points
+  g.speed=clamp(g.speed,6,P.rush?40:32); g.s+=g.dir*g.speed*h;
   C.pts+=45*h; C.timer=CFG.COMBO_T; P.boost=Math.min(100,P.boost+12*h); P.grindT=(P.grindT||0)+h;
   P.branchCd-=h;
   // Branching: steer toward a rail that splits off here
@@ -2352,13 +2411,14 @@ function grindStep(h,jump,trk,boosting,inp){
     P.vel.set(T2.x*g.dir*g.speed,Math.max(T2.y*g.dir*g.speed,0)+3,T2.z*g.dir*g.speed); endGrind(); return; }
   railPt(r,g.s,P.pos); P.vel.set(T.x*g.dir*g.speed,T.y*g.dir*g.speed,T.z*g.dir*g.speed);
   if(Math.random()<0.7) emit(P.pos.clone(),rv(3).addScaledVector(T,-g.dir*3).setY(2+Math.random()*2),Math.random()<0.5?0xffe23a:0xff9548,0.35,0.09,14);
-  if(jump){ P.vel.y=CFG.JUMP; endGrind(); P.noGrind=0.15; P.squash=0.2; P.jumpT=clock; P.flipRail=r; switchFeet(); sfx.jump(); }
+  if(jump){ P.vel.y=CFG.JUMP; endGrind(); P.noGrind=0.15; P.squash=0.2; P.jumpT=clock; P.flipRail=r; switchFeet(); sfx.jump();
+    if(inp.m>0.3&&!P.trick) startFlip(inp,true); }   // jump off a rail while holding a direction = that flip (front/back/side)
   else if(trk&&P.grindCd<=0){ trick(['Rail Switch','Soul Slide','Torque Grind','Fishbrain'][Math.floor(Math.random()*4)],90); P.grindCd=0.45; switchFeet(); sfx.trick(); }
 }
 // WallRideSystem: forgiving catch when airborne alongside a tall wall
 function trySnapWall(fromGround=false){
   if(P.noWall>0||P.knock>0) return; const v=P.vel, p=P.pos, hs=Math.hypot(v.x,v.z); if(hs<7||(!fromGround&&p.y<0.5)) return;
-  for(const s of WALLS){ if(s.top<p.y+1.6) continue;
+  for(const s of WALLS){ if(s.top<p.y+1.6) continue; if(s.bot!==undefined&&p.y<s.bot-0.4) continue;
     const cx=clamp(p.x,s.x0,s.x1), cz=clamp(p.z,s.z0,s.z1), dx=p.x-cx, dz=p.z-cz, d=Math.hypot(dx,dz);
     if(d<1e-3||d>CFG.R+0.6) continue;
     const nx=dx/d, nz=dz/d; if(Math.abs(nx)>0.2&&Math.abs(nz)>0.2) continue; // skip corners
@@ -2408,7 +2468,7 @@ function wallStep(h,jump,trk,boosting){
   if(jump){ v.x=w.t.x*w.speed*0.9+w.n.x*8; v.z=w.t.z*w.speed*0.9+w.n.z*8; v.y=CFG.JUMP*0.95; endWall(); trick('Wall Kick',70); P.jumpT=clock; P.flipRail=null; switchFeet(); sfx.jump(); return; }
   if(trk&&P.grindCd<=0){ trick('Wall Spin',90); P.grindCd=0.45; sfx.trick(); }
   const g=ground(p.x,p.z,p.y); if(p.y<=g.h){ endWall(); land(g); return; }
-  const within=w.n.x?(p.z>s.z0-0.2&&p.z<s.z1+0.2):(p.x>s.x0-0.2&&p.x<s.x1+0.2);
+  const within=(w.n.x?(p.z>s.z0-0.2&&p.z<s.z1+0.2):(p.x>s.x0-0.2&&p.x<s.x1+0.2))&&!(s.bot!==undefined&&p.y<s.bot-0.6);
   if(within&&p.y+0.4>=s.top&&v.y>0){ mantle(); return; }
   if(!within||(p.y+1.0>s.top&&v.y<=0)||w.time>(into>0.35?3.2:2.4)){ endWall(); v.x+=w.n.x*2; v.z+=w.n.z*2; }
 }
@@ -2486,6 +2546,14 @@ function physics(h,inp,first){
     else if(P.knock<=0){ trySnapRail(); if(!P.grind) trySnapWall(); }
   }
 }
+// kill / reset zone: leave the playable city (past the walls, onto the skyline, into the sea, under the map) and you're put back
+function inGateLane(p){ for(const g of GATES){ const dx=p.x-g.p.x, dz=p.z-g.p.z, d=dx*g.o.x+dz*g.o.z, l=Math.abs(dx*g.t.x+dz*g.t.z); if(d>-6&&d<g.L+14&&l<g.w/2+1.5) return true; } return false; }
+function boundsCheck(dt){ const p=P.pos; P.safeT=(P.safeT||0)-dt;
+  const inside=Math.abs(p.x)<EDGE-1&&Math.abs(p.z)<EDGE-1&&p.y>-1&&p.y<60&&!(D.openSouth&&p.z>95);
+  if(inside&&(P.grounded||P.grind)&&P.knock<=0&&P.safeT<=0){ (P.safe??=new V3()).copy(p); P.safeF=P.facing; P.safeT=0.5; }
+  const out=p.y<-6||p.y>90||((Math.abs(p.x)>EDGE+0.5||Math.abs(p.z)>EDGE+0.5)&&!inGateLane(p))||(D.openSouth&&p.z>97&&p.y<0.9&&!inGateLane(p));
+  if(out&&!traveling){ if(P.grind) endGrind(); if(P.wall) endWall(); const s=P.safe||new V3(...D.spawn); p.copy(s); p.y+=0.05; P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.invuln=1;
+    P.facing=P.safeF??P.facing; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); popup('OUT OF BOUNDS','bad'); dropCombo(); } }
 function padCheck(){   // updraft vents: pop straight up to the next level, keeping your line
   if(!P.grounded||P.knock>0) return; const p=P.pos;
   for(const pd of PADS){ if((p.x-pd.x)**2+(p.z-pd.z)**2<pd.r*pd.r&&Math.abs(p.y-pd.y)<0.35){
@@ -2634,7 +2702,7 @@ function update(dt){
       for(let i=0;i<8;i++) emit(c.m.position,rv(5),0xffffff,0.4,0.12,0); }
   }
   // drones
-  updateTraffic(dt);
+  updateTraffic(dt); boundsCheck(dt);
   while(drones.length<heat){ const d=makeDrone(); placeDrone(d); drones.push(d); }
   for(const d of drones){
     if(!d.alive){ d.respawn-=dt; if(d.respawn<=0) placeDrone(d); continue; }
@@ -2656,7 +2724,7 @@ function update(dt){
 const _q=new THREE.Quaternion(), _qa=new THREE.Quaternion(), _ax=new V3(), _UP=new V3(0,1,0), _nv=new V3(), _qt=new THREE.Quaternion(), _qy=new THREE.Quaternion();
 function updateSkater(dt){
   const r=SK, hs=Math.hypot(P.vel.x,P.vel.z);
-  r.root.position.copy(P.pos); P.railLift=lerp(P.railLift||0,P.grind?(P.grind.r.radius||0.08):0,Math.min(1,dt*20)); r.root.position.y+=P.railLift;
+  r.root.position.copy(P.pos); if(P.snapOff){ r.root.position.add(P.snapOff); P.snapOff.multiplyScalar(Math.exp(-dt*14)); } P.railLift=lerp(P.railLift||0,P.grind?(P.grind.r.radius||0.08):0,Math.min(1,dt*20)); r.root.position.y+=P.railLift;
   let tf=P.facing;
   if(P.grind){ const T=railTan(P.grind.r,P.grind.s,tmp); tf=Math.atan2(T.x*P.grind.dir,T.z*P.grind.dir); }
   else if(P.wall) tf=P.wall.up?Math.atan2(-P.wall.n.x,-P.wall.n.z):Math.atan2(P.wall.t.x,P.wall.t.z);
@@ -2782,7 +2850,8 @@ function updateCamera(dt){
   des.lerpVectors(tgt,des,k);
   camera.position.lerp(des,1-Math.exp(-dt*14));
   camera.lookAt(tgt.x,tgt.y+0.3,tgt.z);
-  const boosting=held('boost')&&P.boost>0&&P.knock<=0;   // speed FX (FOV kick + speed lines) are reserved for boosting
+  if(P.rushT>0) P.rushT-=dt;
+  const boosting=(held('boost')&&P.boost>0&&P.knock<=0)||P.rush||P.rushT>0;   // speed FX (FOV kick + speed lines) are reserved for boosting
   camera.fov=lerp(camera.fov,boosting?clamp(72+(hs-10)*0.9,72,90):68,dt*(boosting?5:3)); camera.updateProjectionMatrix();
   $('speedlines').style.opacity=boosting&&hs>8?0.55:0;
 }
@@ -3227,7 +3296,7 @@ $('district').onclick=switchDistrict; $('nextd').onclick=switchDistrict;
 // ====================================================================== ONBOARDING TIPS (each shown once, remembered)
 const TIPS={ start:'Skate to the pink arrows and TAG them · the pointer shows the nearest one', tag:'Hold E / RMB / X, then FLICK the arrows shown (mouse, arrow keys, right stick)',
   grind:'JUMP onto a rail to GRIND · SPACE again to hop off', wall:'JUMP while skating alongside a wall to WALL RIDE',
-  boost:'Hold SHIFT / RT to BOOST · landings, transfers and combos refill it', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
+  boost:'Hold SHIFT / RT to BOOST · grinding fills it · grind long for a 2x GRIND RUSH', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
   flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'DRONES! Stomp them from above or outrun them', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
 let tipSeen={}; try{ tipSeen=JSON.parse(localStorage.getItem('inkline_tips')||'{}')||{}; }catch(e){}
 let tipT=0, tipQ=[], tipCheck=0;
@@ -3273,7 +3342,7 @@ function frame(now){
   post.render();
 }
 requestAnimationFrame(frame);
-window.__game={CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
+window.__game={COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
 </html>
