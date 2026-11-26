@@ -1623,10 +1623,31 @@ function skyRooftop(cx,cz,S,y,n,pal,isl){ const h=S/2, sx=(n&1)?1:-1, sz=(n&2)?1
   const g=y+0.95, e=h-0.4, m=6; for(const [a0,a1] of [[-e,-m],[m,e]]){
     addRail([[cx+a0,g,cz-e],[cx+a1,g,cz-e]],{color:0xff6fa8,radius:0.06,posts:true}); addRail([[cx+a0,g,cz+e],[cx+a1,g,cz+e]],{color:0xff6fa8,radius:0.06,posts:true});
     addRail([[cx-e,g,cz+a0],[cx-e,g,cz+a1]],{color:0xff6fa8,radius:0.06,posts:true}); addRail([[cx+e,g,cz+a0],[cx+e,g,cz+a1]],{color:0xff6fa8,radius:0.06,posts:true}); }
-  floorFeature(cx-sx*4,cz+sz*2,y,n+2); isl.pent=P0; isl.sx=sx; isl.sz=sz; isl.bill=[bx,bz]; }
+  floorFeature(cx-sx*4,cz+sz*2,y,n+2); if(S>=40) skyExtras(cx,cz,S,y,n,sx,sz); isl.pent=P0; isl.sx=sx; isl.sz=sz; isl.bill=[bx,bz]; }
+/* more to skate on the bigger islands: a funbox, a stair set with a handrail, a shed with a planter and bench */
+function skyExtras(cx,cz,S,y,n,sx,sz){ const h=S/2;
+  { const fx=cx-sx*11, fz=cz-sz*11; box2(fx-3,fx+3,fz-2.5,fz+2.5,y,y+1.2,toon(0x39a6b8));                                     // funbox
+    ramp(fx-6,fx-3,fz-2.5,fz+2.5,1.2,'+x',false,0x8fb7a2,{y0:y,bot:y-0.6}); ramp(fx+3,fx+6,fz-2.5,fz+2.5,1.2,'-x',false,0x8fb7a2,{y0:y,bot:y-0.6});
+    addRail([[fx-2.7,y+1.27,fz],[fx+2.7,y+1.27,fz]],{color:0xffe23a,radius:0.06}); }
+  { const tx=cx+sx*11, tz=cz-sz*(h-14), st=toon(0x9aa0aa);                                                                        // stair set (3 steps) + handrail down it
+    for(let k=0;k<3;k++) box2(tx-3,tx+3,tz+sz*(k*1.2)-0.6,tz+sz*(k*1.2)+0.6,y,y+1.2-k*0.4,st);
+    addRail([[tx+3.4,y+2.0,tz-sz*0.6],[tx+3.4,y+0.9,tz+sz*3.6]],{color:0xff6fa8,radius:0.07,posts:true}); }
+  { const bx=cx-sx*(h-6), bz=cz+sz*12; box2(bx-2,bx+2,bz-1.6,bz+1.6,y,y+3,toon(0x6b6a60)); edgeRail(bx-2,bx+2,bz-1.6,bz+1.6,y+3,0x7ff3ff);   // shed
+    const px=cx-sx*9, pz=cz+sz*9; box2(px-1.2,px+1.2,pz-1.2,pz+1.2,y,y+0.6,toon(0x777b70)); const l=new THREE.Mesh(new THREE.IcosahedronGeometry(1.4,0),leafMat); l.position.set(px,y+1.6,pz); outline(l,0.05); world.add(l);
+    box2(px+sx*2.4-1.4,px+sx*2.4+1.4,pz-0.4,pz+0.4,y,y+0.5,toon(0xf2a52f)); addRail([[px+sx*2.4-1.3,y+0.57,pz],[px+sx*2.4+1.3,y+0.57,pz]],{color:0xffffff,radius:0.05}); } }
+/* the Summit: the highest deck in the city, over the most central island -- the Gold Record lands up here */
+function buildSummit(made){ const C0=made.slice().sort((a,b)=>Math.hypot(a.x,a.z)-Math.hypot(b.x,b.z))[0]; if(!C0) return;
+  const TY=SKYY+26, x=C0.x, z=C0.z, R=5.5, gold=metal(0xf2c83a);
+  const i0=solids.length; slab(x-R,x+R,z-R,z+R,TY,toon(0x2a2738),{th:1,pillars:false}); solids[i0].sky=true; edgeRail(x-R,x+R,z-R,z+R,TY,0xf2c83a);
+  box2(x-0.9,x+0.9,z-0.9,z+0.9,SKYY,TY-1,toon(0x15151a));                                                                   // the mast holding it up
+  for(const a of [0,1,2,3]){ const ang=a*Math.PI/2+Math.PI/4, tip=new THREE.Mesh(new THREE.ConeGeometry(0.6,2.4,4),gold); tip.position.set(x+Math.cos(ang)*(R-0.5),TY+1.2,z+Math.sin(ang)*(R-0.5)); outline(tip,0.04); world.add(tip); }   // crown points
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(R+0.4,0.18,6,32),gold); ring.rotation.x=Math.PI/2; ring.position.set(x,TY-0.5,z); world.add(ring);
+  const under=new THREE.Mesh(new THREE.ConeGeometry(R*1.414,6,4,1),toon(0x2a2738)); under.rotation.set(Math.PI,Math.PI/4,0); under.position.set(x,TY-4,z); outline(under,0.08); world.add(under);
+  launchPad(x+C0.sx*8,z+C0.sz*8,SKYY,TY,1.4,0xf2c83a,[x,z]);
+  FLOOR.summit={x,y:TY,z}; }
 function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
   for(const gx of grid) for(const gz of grid){ const cx=gx, cz=gz; let S=0, r;
-    for(const s0 of [34+(Math.abs(gx/60*3+gz/60*7)%3)*3,30,24]){ r=[cx-s0/2,cx+s0/2,cz-s0/2,cz+s0/2];
+    for(const s0 of [44+(Math.abs(gx/60*3+gz/60*7)%3)*2,40,34,26]){ r=[cx-s0/2,cx+s0/2,cz-s0/2,cz+s0/2];
       if(D.openSouth&&r[3]>88) continue; if(Math.abs(cx)+s0/2>EDGE-3||Math.abs(cz)+s0/2>EDGE-3) continue; if(tallBlock(r[0]-2,r[1]+2,r[2]-2,r[3]+2,y-4,y+9)) continue; S=s0; break; }
     if(!S) continue;
     const pal=[[0x39413c,0x6b6a60],[0x4a3f7a,0x8c7ac8],[0x3a5a6a,0x6a9aa8]][made.length%3];
@@ -1639,6 +1660,7 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
     if(k++%5===4) addRail(ax?[[rr[0]+0.3,y+0.12,a.z],[rr[1]-0.3,y+0.12,a.z]]:[[a.x,y+0.12,rr[2]+0.3],[a.x,y+0.12,rr[3]-0.3]],{color:0xff6fa8,radius:0.1});   // the odd grind link
     else { const i0=solids.length; slab(...rr,y,toon(0x2a2738),{th:0.7,pillars:false}); solids[i0].sky=true; addRail(ax?[[rr[0]+0.5,y+0.95,rr[3]-0.2],[rr[1]-0.5,y+0.95,rr[3]-0.2]]:[[rr[1]-0.2,y+0.95,rr[2]+0.5],[rr[1]-0.2,y+0.95,rr[3]-0.5]],{color:0xff6fa8,radius:0.07,posts:true});
       const tr=new THREE.Mesh(new THREE.BoxGeometry(ax?rr[1]-rr[0]:1.2,1.6,ax?1.2:rr[3]-rr[2]),SKYM.truss); tr.position.set((rr[0]+rr[1])/2,y-1.5,(rr[2]+rr[3])/2); world.add(tr); } }
+  buildSummit(made);
   // Mid Floor vents up to the islands (never from under a deck), cables back down
   const C=FLOOR.cells; let up=0;
   for(const isl of made){ if(up>=10) break; let best=null, bd=1e9;
@@ -3507,8 +3529,8 @@ const fmtTime=t=>{ const h=Math.floor(t/3600), m=Math.floor(t/60)%60, s=Math.flo
 // Grab it to unlock ZERO and the AFTER HOURS level for good.
 let EGG=null, eggActive=false;
 function cityClaimed(){ if(eggActive||EGG){ return; } eggActive=true; spawnEgg(); score+=AFTER()?7500:5000; saveRun();
-  message(`CITY CLAIMED!<br><span style="font-size:22px">SOMETHING GOLDEN JUST APPEARED · FOLLOW THE LIGHT</span>`,4); sfx.secret&&sfx.secret(); }
-function eggSpot(){ if(window.__spire){ const S=__spire.S3; return new V3(S.x,46+1.9,S.z); }
+  message(`CITY CLAIMED!<br><span style="font-size:22px">SOMETHING GOLDEN JUST LANDED ON THE SUMMIT · GRIND TO THE TOP OF THE CITY</span>`,4); sfx.secret&&sfx.secret(); }
+function eggSpot(){ if(FLOOR.summit) return new V3(FLOOR.summit.x,FLOOR.summit.y+1.9,FLOOR.summit.z); if(window.__spire){ const S=__spire.S3; return new V3(S.x,46+1.9,S.z); }
   const top=FILL.slice().sort((a,b)=>b.h-a.h)[0]; return top?new V3((top.x0+top.x1)/2,top.h+1.9,(top.z0+top.z1)/2):new V3(D.golden[0],D.golden[1]+1,D.golden[2]); }
 function recordTex(){ return canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#f2c83a'; g.beginPath(); g.arc(128,128,126,0,7); g.fill(); g.strokeStyle='rgba(120,80,10,.35)'; g.lineWidth=3; for(let r=40;r<124;r+=9){ g.beginPath(); g.arc(128,128,r,0,7); g.stroke(); }
   g.fillStyle='#1b1724'; g.beginPath(); g.arc(128,128,34,0,7); g.fill(); g.fillStyle='#ff3d8b'; g.font='bold 44px Bungee, Impact'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('0',128,131); }); }
