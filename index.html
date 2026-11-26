@@ -30,6 +30,9 @@
   #score-box .lbl { font-size:12px; letter-spacing:2px; color:var(--lime); }
   #score { font-size:30px; line-height:1; }
   #timer { position:absolute; right:18px; top:16px; font-size:28px; }
+  #hintbtn { position:absolute; right:18px; top:72px; width:40px; height:40px; border-radius:50%; border:3px solid #1b1724; background:var(--yellow,#f2a52f); color:#1b1724;
+    font:22px Bungee, Impact, sans-serif; line-height:32px; padding:0; cursor:pointer; pointer-events:auto; box-shadow:3px 3px 0 #1b1724; z-index:5; }
+  #hintbtn.off { background:#4a4558; color:#bcb6c8; text-decoration:line-through; opacity:.75; }
   #heat { position:absolute; right:18px; top:72px; font-size:20px; color:var(--yellow); text-shadow:2px 2px 0 #111; letter-spacing:2px; }
   #tags { position:absolute; left:18px; top:86px; font-size:16px; box-shadow:5px 5px 0 var(--cyan); }
   #cans { position:absolute; left:18px; top:134px; font-size:16px; box-shadow:5px 5px 0 var(--lime); }
@@ -137,6 +140,7 @@
 <div id="hud" class="hidden">
   <div id="score-box" class="chip"><div class="lbl">SCORE</div><div id="score">0</div></div>
   <div id="timer" class="chip">0:00</div>
+  <button id="hintbtn" title="Hints on/off (H)" aria-label="Toggle hints">?</button>
   <div id="heat"></div>
   <div id="tags" class="chip">TAGS <span id="tagc">0/0</span></div>
   <div id="cans" class="chip">CANS <span id="canc">0</span></div>
@@ -2584,7 +2588,7 @@ function startMusic(){
 
 // ====================================================================== INPUT
 const keys=new Set(), pressed=new Set();
-const KEYMAP={KeyW:'f',KeyS:'b',KeyA:'l',KeyD:'r',Space:'jump',ShiftLeft:'boost',ShiftRight:'boost',KeyJ:'fo',KeyK:'fs',KeyL:'ft',KeyE:'spray',KeyV:'aim',KeyZ:'camdist',KeyT:'tagmode',KeyQ:'brake',KeyF:'drift',KeyR:'ability',KeyC:'cam',KeyM:'music',KeyP:'pause',ArrowLeft:'cl',ArrowRight:'cr',ArrowUp:'cu',ArrowDown:'cd',Escape:'esc'};
+const KEYMAP={KeyW:'f',KeyS:'b',KeyA:'l',KeyD:'r',Space:'jump',ShiftLeft:'boost',ShiftRight:'boost',KeyJ:'fo',KeyK:'fs',KeyL:'ft',KeyE:'spray',KeyV:'aim',KeyZ:'camdist',KeyH:'hints',KeyT:'tagmode',KeyQ:'brake',KeyF:'drift',KeyR:'ability',KeyC:'cam',KeyM:'music',KeyP:'pause',ArrowLeft:'cl',ArrowRight:'cr',ArrowUp:'cu',ArrowDown:'cd',Escape:'esc'};
 addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT'||state==='editor') return; const a=KEYMAP[e.code]; if(!a) return; e.preventDefault(); if(!keys.has(a)) pressed.add(a); keys.add(a); });
 addEventListener('keyup',e=>{ const a=KEYMAP[e.code]; if(a) keys.delete(a); });
 addEventListener('blur',()=>keys.clear());
@@ -3832,8 +3836,16 @@ const TIPS={ start:'Skate to the pink arrows and TAG them · the pointer shows t
   flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'COPS! Spray them (E / RB) to daze them · stomp drones · break line of sight to lose stars', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
 let tipSeen={}; try{ tipSeen=JSON.parse(localStorage.getItem('inkline_tips')||'{}')||{}; }catch(e){}
 let tipT=0, tipQ=[], tipCheck=0;
-function tip(k){ if(tipSeen[k]||tipQ.includes(TIPS[k])) return; tipSeen[k]=1; try{ localStorage.setItem('inkline_tips',JSON.stringify(tipSeen)); }catch(e){} tipQ.push(TIPS[k]); }
+let hintsOn=true; try{ hintsOn=localStorage.getItem('inkline_hints')!=='0'; }catch(e){}
+function tip(k){ if(!hintsOn) return; if(tipSeen[k]||tipQ.includes(TIPS[k])) return; tipSeen[k]=1; try{ localStorage.setItem('inkline_tips',JSON.stringify(tipSeen)); }catch(e){} tipQ.push(TIPS[k]); }
+function setHints(on,announce){ hintsOn=on; try{ localStorage.setItem('inkline_hints',on?'1':'0'); }catch(e){} $('hintbtn').classList.toggle('off',!on);
+  if(!on){ tipQ.length=0; tipT=0; $('tip').classList.add('hidden'); } else { tipSeen={}; try{ localStorage.removeItem('inkline_tips'); }catch(e){} }   /* turning hints back on replays them */
+  if(announce&&state==='play') popup(on?'HINTS ON':'HINTS OFF'); }
+$('hintbtn').classList.toggle('off',!hintsOn);
+$('hintbtn').addEventListener('mousedown',e=>e.stopPropagation()); $('hintbtn').addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+$('hintbtn').onclick=e=>{ e.stopPropagation(); setHints(!hintsOn,true); e.currentTarget.blur(); };
 function updateTips(dt){
+  if(pressed.has('hints')) setHints(!hintsOn,true);
   tipCheck-=dt;
   if(tipCheck<=0){ tipCheck=0.4; const hs=Math.hypot(P.vel.x,P.vel.z);
     if(clock>1.5) tip('start');
