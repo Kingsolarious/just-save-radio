@@ -715,21 +715,44 @@ function guard(a,b,y,color=0xffe23a,lift=0.9){ return addRail([[a[0],y+lift,a[1]
 // it tries approach angles and steeper pitches until the line is clear of buildings and starts on solid footing.
 const LIFTS=[]; let LIFT_STRICT=false;
 function riderClear(x,z,y,R=0.7){ for(const s of solids){ if(x<=s.x0-R||x>=s.x1+R||z<=s.z0-R||z>=s.z1+R) continue; const top=topAt(s,x,z); if(top>y-0.15&&(s.bot===undefined||s.bot<y+1.75)) return false; } return true; }
+/* ---- grind lifts as city infrastructure: a painted run-up, a neon gateway that says where it goes, a girder under the rail ---- */
+const LIFTM={ beam:metal(0x3a3f4a), post:metal(0x2a2f3a) }, liftSignCache={};
+function liftSign(txt,col){ return liftSignCache[txt+col]??=canvasTex(256,96,(g,w,h)=>{ g.fillStyle='#15131f'; g.fillRect(0,0,w,h); g.strokeStyle='#'+col.toString(16).padStart(6,'0'); g.lineWidth=8; g.strokeRect(4,4,w-8,h-8);
+  g.fillStyle=g.strokeStyle; g.font='bold 44px Bungee, Impact'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('▲ '+txt,w/2,h/2+3); }); }
+function liftDress(L){ const r=L.rail, p0=L.run?r.pts[1]:r.pts[0], [ux,uz]=L.dir, sx=-uz, sz=ux, y=L.from, col=L.col, neon=new THREE.MeshBasicMaterial({color:col});
+  const txt=L.to>=SKYY-1?'SKY':L.to>=MIDY-1?(L.from>=MIDY-1?'ROOF':'MID'):'ROOF';
+  // gateway arch over the entry
+  const q0=r.pts[0], gx=q0.x-ux*(L.run?0.6:1.2), gz=q0.z-uz*(L.run?0.6:1.2);   /* the arch stands over the way in */ for(const sd of [-1.5,1.5]){ const post=new THREE.Mesh(new THREE.BoxGeometry(0.22,3.2,0.22),LIFTM.post); post.position.set(gx+sx*sd,y+1.6,gz+sz*sd); outline(post,0.03); world.add(post);
+    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.08,2.8,0.08),neon); strip.position.set(gx+sx*sd+ux*0.13,y+1.6,gz+sz*sd+uz*0.13); world.add(strip); }
+  const bar=new THREE.Mesh(new THREE.BoxGeometry(3.3,0.7,0.16),[LIFTM.post,LIFTM.post,LIFTM.post,LIFTM.post,new THREE.MeshBasicMaterial({map:liftSign(txt,col)}),new THREE.MeshBasicMaterial({map:liftSign(txt,col)})]);
+  bar.position.set(gx,y+3.35,gz); bar.rotation.y=Math.atan2(ux,uz); world.add(bar);
+  // painted chevrons on the run-up
+  if(L.run){ for(let q=0;q<3;q++){ const cx=p0.x-ux*(4.2+q*1.8), cz=p0.z-uz*(4.2+q*1.8); for(const sd of [-1,1]){ const m=new THREE.Mesh(new THREE.PlaneGeometry(0.28,1.3),neon); m.rotation.set(-Math.PI/2,0,Math.atan2(ux,uz)+sd*0.75); m.position.set(cx+sx*sd*0.42,y+0.06,cz+sz*sd*0.42); world.add(m); } } }
+  // a girder under every climbing segment so it reads as a structure, not a floating rail
+  for(let i=L.run?1:0;i<r.pts.length-1;i++){ const a=r.pts[i], b=r.pts[i+1], d=b.clone().sub(a), len=d.length(); if(len<0.5) continue;
+    const gb=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.5,len),LIFTM.beam); gb.position.copy(a).add(b).multiplyScalar(0.5); gb.position.y-=0.5; gb.lookAt(b.x,b.y-0.5,b.z); outline(gb,0.03); world.add(gb); } }
+/* roll into a lift's run-up and you're on it -- no lucky jump needed */
+function liftCatch(){ const hs=Math.hypot(P.vel.x,P.vel.z); if(hs<2.5) return;
+  for(const L of LIFTS){ if(L.fallback||(L.rail===P.lastRail&&P.noSame>0)) continue; const r=L.rail, p0=r.pts[0], p1=r.pts[1];
+    if(Math.abs(P.pos.y-L.from)>0.7) continue; const dx=P.pos.x-p0.x, dz=P.pos.z-p0.z; if(dx*dx+dz*dz>3.2*3.2) continue;
+    const [ux,uz]=L.dir; if((P.vel.x*ux+P.vel.z*uz)/hs<0.45) continue;   // heading up it, roughly
+    P.vel.set(ux*Math.max(hs,9),0,uz*Math.max(hs,9)); startGrind(r,0.3); trick('Lift',40); return; } }
 function launchPad(x,z,y,toH,r,col=0x7ff3ff,target=null){ const tx=target?target[0]:x, tz=target?target[1]:z, rise=toH-y;
   let bx=x-tx, bz=z-tz; if(Math.hypot(bx,bz)<0.5){ bx=1; bz=0; } const a0=Math.atan2(bx,bz);
   for(const da of [0,0.45,-0.45,0.9,-0.9,1.4,-1.4,1.9,-1.9,2.5,-2.5,Math.PI]){ const dx=Math.sin(a0+da), dz=Math.cos(a0+da);
     let e=0; while(e<45&&ground(tx+dx*e,tz+dz*e,toH+0.6).h>toH-0.35) e+=0.4; if(e<0.4||e>=45) continue;      // walk out to the edge of the destination
     const ex=tx+dx*(e-0.35), ez=tz+dz*(e-0.35);
          let deck=true; for(let q=0.3;q<=5;q+=0.5){ const qx=ex-dx*q, qz=ez-dz*q; if(Math.abs(ground(qx,qz,toH+0.6).h-toH)>0.35||!riderClear(qx,qz,toH+0.25)) { deck=false; break; } } if(!deck) continue;   /* the top of the lift must land on 5m of open deck */
-    for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4]){ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
+    for(const run of [8,4,0]) for(const slope of [0.42,0.6,0.85,1.2,1.7,2.4]){   /* a lift with a run-up beats a gentler one without */ const L=rise/slope, sx=ex+dx*L, sz=ez+dz*L;
       if(Math.abs(sx)>EDGE-3||Math.abs(sz)>EDGE-3||(D.openSouth&&sz>90)) continue;
       if(Math.abs(ground(sx,sz,y+1.2).h-y)>0.6) continue;                                                // must start on the surface you're riding
+      if(run){ let clear=true; for(let q=1;q<=run;q++){ const qx=sx+dx*q, qz=sz+dz*q; if(Math.abs(qx)>EDGE-2||Math.abs(qz)>EDGE-2||Math.abs(ground(qx,qz,y+1.2).h-y)>0.4||!riderClear(qx,qz,y+0.3,0.6)){ clear=false; break; } } if(!clear) continue; }   /* a straight run-up into it */
       let ok=true; const n=Math.max(4,Math.ceil(Math.hypot(L,rise)/1.2));
       for(let k=0;k<n&&ok;k++){ const u=k/n, px=sx+(ex-sx)*u, pz=sz+(ez-sz)*u, py=y+0.7+(toH+0.15-y-0.7)*u; if(!riderClear(px,pz,py,u>0.8?0:0.4)) ok=false; else if(u<0.85&&rails.some(o=>{ if(o.bb&&(px<o.bb[0]-2.5||px>o.bb[1]+2.5||pz<o.bb[2]-2.5||pz>o.bb[3]+2.5)) return false; const c=railClosest(o,{x:px,y:py,z:pz}); return c.d2<6.25&&Math.abs(c.y-py)<2.5; })) ok=false;   /* lifts never cross another rail on the way up */ }
       if(!ok) continue;
-      const pts=[]; const seg=Math.max(1,Math.ceil(L/7)); for(let k=0;k<=seg;k++){ const u=k/seg; pts.push([sx+(ex-sx)*u,y+0.7+(toH+0.15-y-0.7)*u,sz+(ez-sz)*u]); }
+      const pts=run?[[sx+dx*2.2,y+0.32,sz+dz*2.2]]:[]; const seg=Math.max(1,Math.ceil(L/7)); for(let k=0;k<=seg;k++){ const u=k/seg; pts.push([sx+(ex-sx)*u,y+0.7+(toH+0.15-y-0.7)*u,sz+(ez-sz)*u]); }   /* a low lead-in you roll straight onto */
       pts.push([ex-dx*1.8,toH+0.15,ez-dz*1.8]);
-      const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez]}); return rl; } }
+      const rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true,postEvery:1}); rl.lift=true; const LF={rail:rl,from:y,to:toH,start:[sx,sz],end:[ex,ez],dir:[-dx,-dz],run,col:col||0x7ff3ff}; LIFTS.push(LF); liftDress(LF); return rl; } }
   // nothing clear: a steep direct rail from where the vent would have been
   if(LIFT_STRICT) return null;
   const pts=[[x,y+0.7,z],[tx,toH+0.15,tz]], rl=addRail(pts,{color:col||0x7ff3ff,radius:0.11,posts:true}); rl.lift=true; LIFTS.push({rail:rl,from:y,to:toH,start:[x,z],end:[tx,tz],fallback:true}); return rl; }
@@ -3127,7 +3150,7 @@ function physics(h,inp,first){
   const g=ground(p.x,p.z,p.y);
   if(P.grounded){
     const drop=p.y-g.h, snap=Math.max(0.36,hs*h*1.1);
-    if(drop<=snap){ const vy=(g.s&&g.s.type==='ramp')?(g.h-p.y)/h:0; P.groundVy=lerp(P.groundVy,vy,0.35); p.y=g.h; P.gs=g.s; qpCheck(); padCheck(); }
+    if(drop<=snap){ const vy=(g.s&&g.s.type==='ramp')?(g.h-p.y)/h:0; P.groundVy=lerp(P.groundVy,vy,0.35); p.y=g.h; P.gs=g.s; qpCheck(); padCheck(); if(P.knock<=0&&!P.grind) liftCatch(); }
     else { const ps=P.gs; let vy=clamp(P.groundVy,-4,22);
       if(ps&&ps.type==='ramp'&&!ps.qp&&vy>1){ vy=hs*(ps.h/ps.L)*1.3+3; if(ps.h<3) trick('Kicker',40); }
       P.grounded=false; v.y=vy; P.airTime=0; P.gs=null; }
