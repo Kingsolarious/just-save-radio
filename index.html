@@ -25,6 +25,11 @@
   /* everything on screen scales with the viewport (--ui is set from JS): about half size on a landscape phone, 1 on desktop */
   #hud > *, .screen > *, #mphud, #padtoast, #lockon > * { zoom:var(--ui,1); }
   .screen { overflow-y:auto; justify-content:safe center; }
+  /* laptop-height windows: shrink the logo with the window and put the settings in two columns so SKATE! stays on screen */
+  @media (max-height:1000px){ .logo:has(.logo-zero) { font-size:clamp(34px,min(8.5vw,9.5vh),104px); } #title { gap:10px; }
+    #title .row > div[style] { display:grid !important; grid-template-columns:1fr 1fr; gap:8px !important; } }
+  @media (max-height:820px){ #title > * { order:5; } #title > .logo { order:0; } #title > .sub { order:1; } #title > .row:has(#crew) { order:2; } #title > #continue, #title > #start { order:3; } #title > .row:has(#sigprev) { order:4; } }
+  @media (max-height:700px){ #title > .note:last-child { display:none; } }
   @media (max-height:520px){ .screen { gap:8px; } #pause { display:grid; grid-template-columns:1fr 1fr; align-content:center; justify-items:stretch; padding:12px max(16px, calc(50vw - 280px)); } #pause .logo, #pause .sub, #pause #presume { grid-column:1 / -1; } #title .row > div[style] { display:grid !important; grid-template-columns:1fr 1fr; gap:8px !important; } }
   #score-box { position:absolute; left:18px; top:16px; }
   #score-box .lbl { font-size:12px; letter-spacing:2px; color:var(--lime); }
