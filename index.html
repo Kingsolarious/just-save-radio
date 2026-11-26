@@ -2542,26 +2542,73 @@ function makeDrone(){
 // short-range drone that flies to your last known spot and radios it to every cop. Stay unseen (or 50m+ away) to shed stars.
 // Spray a cop or drone to daze it (they lose track of you). Cops shoot and tackle; run out of health and you're BUSTED.
 const COPS=[], PDRONES=[]; let lastKnown=null, evadeT=0, spotT=0, copSpawnT=0, alertMsgT=0;
-const COPM={ jacket:toon(0x26305a), shirt:toon(0x8fb0e8), skin:toon(0xc98b62), cap:toon(0x1b1f3a), badge:metal(0xf2c83a), boot:toon(0x15151c), star:new THREE.MeshBasicMaterial({color:0xffe23a}) };
+const COPM={ jacket:toon(0x26305a), shirt:toon(0x8fb0e8), skin:toon(0xc98b62), cap:toon(0x1b1f3a), badge:metal(0xf2c83a), boot:toon(0x15151c), star:new THREE.MeshBasicMaterial({color:0xffe23a}),
+  pants:toon(0x1d2547), stripe:toon(0xf2c83a), belt:toon(0x121218), buckle:metal(0xd9dce6), glove:toon(0x18181f), tie:toon(0x141a33), white:toon(0xf4efe3), ink:toon(0x111114),
+  glass:new THREE.MeshBasicMaterial({color:0x0d0f1a}), shine:new THREE.MeshBasicMaterial({color:0x7ff3ff}), gun:metal(0x2a2c33), sole:toon(0x2a2a30), radio:toon(0x22242c), mic:toon(0x0f0f12),
+  armor:toon(0x2b2f3a), plate:metal(0x59606e), gold:metal(0xf2c83a), red:toon(0xc8323c), hair:toon(0x2a1c14), med:[toon(0xe94b42),toon(0x39a6b8),toon(0xf2a52f)] };
+const COP_SKIN=[0xc98b62,0x8b5a3c,0xe8b48a,0x6b4128,0xd9a070].map(c=>toon(c));
 function limb(w,h,d,mat,y){ const piv=new THREE.Group(); piv.position.y=y; const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.y=-h/2; outline(m,0.03); piv.add(m); return piv; }
-const COPV={ minion:{ jacket:toon(0x4a3f7a), shirt:toon(0x2a2440), cap:toon(0x15131f) }, boss:{ jacket:toon(0x8a1c2a), shirt:toon(0xf4efe3), cap:toon(0x2a1012) } };
-function makeCop(kind){ const V=COPV[kind]||{}; const g=new THREE.Group(); const COPM_=COPM; { /* per-variant materials */ }
-  const legL=limb(0.24,0.92,0.26,COPM.jacket,0.95), legR=limb(0.24,0.92,0.26,COPM.jacket,0.95); legL.position.x=-0.15; legR.position.x=0.15; g.add(legL,legR);
-  for(const L of [legL,legR]){ const b=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.14,0.36),COPM.boot); b.position.set(0,-0.87,0.05); L.add(b); }
-  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.78,0.36),COPM.jacket); torso.position.y=1.36; outline(torso,0.04); g.add(torso);
-  const shirt=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.5,0.02),COPM.shirt); shirt.position.set(0,1.42,0.19); g.add(shirt);
-  const badge=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.13,0.03),COPM.badge); badge.position.set(-0.17,1.52,0.19); g.add(badge);
-  const armL=limb(0.18,0.72,0.2,COPM.jacket,1.7), armR=limb(0.18,0.72,0.2,COPM.jacket,1.7); armL.position.x=-0.42; armR.position.x=0.42; g.add(armL,armR);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.21,12,10),COPM.skin); head.position.y=1.98; outline(head,0.03); g.add(head);
-  const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.23,0.23,0.14,12),COPM.cap); cap.position.y=2.14; outline(cap,0.03); g.add(cap);
-  const brim=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.04,0.18),COPM.cap); brim.position.set(0,2.08,0.2); g.add(brim);
-  const stars=new THREE.Group(); stars.position.y=2.5; stars.visible=false; for(let k=0;k<3;k++){ const st=new THREE.Mesh(new THREE.OctahedronGeometry(0.11),COPM.star); const a=k/3*Math.PI*2; st.position.set(Math.cos(a)*0.4,0,Math.sin(a)*0.4); stars.add(st); } g.add(stars);
-  const flash=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6),new THREE.MeshBasicMaterial({color:0xfff2a8})); flash.position.set(0,-0.72,0.12); flash.visible=false; armR.add(flash);
-  if(kind){ g.traverse(o=>{ if(!o.isMesh||o.userData.isOutline) return; if(o.material===COPM.jacket) o.material=V.jacket; else if(o.material===COPM.shirt) o.material=V.shirt; else if(o.material===COPM.cap) o.material=V.cap; });
-    if(kind==='minion'){ const visor=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.12,0.06),new THREE.MeshBasicMaterial({color:0x7ff3ff})); visor.position.set(0,1.99,0.2); g.add(visor);
-      const shield=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.9,0.06),toon(0x9fb4d8)); shield.position.set(0,-0.35,0.22); outline(shield,0.03); armL.add(shield); }
-    if(kind==='boss'){ g.scale.setScalar(1.55); const crest=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.3,4),COPM.badge); crest.position.set(0,2.32,0.12); g.add(crest);
-      const light=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,6),droneRed); light.position.set(0,2.24,0); g.add(light); } }
+const COPV={ minion:{ jacket:toon(0x4a3f7a), shirt:toon(0x2a2440), cap:toon(0x15131f), pants:toon(0x2a2440) }, boss:{ jacket:toon(0x8a1c2a), shirt:toon(0xf4efe3), cap:toon(0x2a1012), pants:toon(0x1b1016) } };
+/* a cel-shaded beat cop: creased uniform, duty belt, gloves, sidearm, radio mic, cap with badge, shades or eyes -- minions in riot gear, the boss in dress uniform */
+function makeCop(kind){ const V=COPV[kind]||{}; const g=new THREE.Group(), M=COPM, B=(w,h,d,mat,x,y,z,parent=g,ol=0)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.set(x,y,z); if(ol) outline(m,ol); parent.add(m); return m; };
+  const skin=COP_SKIN[Math.floor(Math.random()*COP_SKIN.length)];
+  // legs: trousers with a side stripe, a knee crease, boots with soles and toe caps
+  const legL=limb(0.25,0.9,0.27,M.pants,0.95), legR=limb(0.25,0.9,0.27,M.pants,0.95); legL.position.x=-0.15; legR.position.x=0.15; g.add(legL,legR);
+  for(const [L,sd] of [[legL,-1],[legR,1]]){ B(0.02,0.82,0.05,M.stripe,sd*0.128,-0.45,0,L); B(0.24,0.03,0.02,M.ink,0,-0.46,0.137,L);
+    if(kind==='minion') B(0.27,0.22,0.08,M.plate,0,-0.52,0.15,L,0.02);   // knee guards
+    B(0.27,0.16,0.38,M.boot,0,-0.86,0.05,L,0.025); B(0.28,0.04,0.4,M.sole,0,-0.95,0.05,L); B(0.2,0.05,0.08,M.sole,0,-0.82,0.21,L); }
+  // pelvis + duty belt: buckle, holster, radio pouch, cuffs, baton
+  B(0.6,0.18,0.34,M.pants,0,1.0,0,g,0.03);
+  B(0.66,0.1,0.4,M.belt,0,1.1,0,g); B(0.1,0.08,0.03,M.buckle,0,1.1,0.205);
+  B(0.12,0.22,0.16,M.belt,0.36,0.98,0.02,g,0.02); B(0.06,0.1,0.08,M.gun,0.36,1.12,0.06);                     // holster with the grip showing
+  B(0.1,0.14,0.08,M.radio,-0.3,1.06,0.18,g,0.015); B(0.03,0.06,0.03,M.mic,-0.28,1.16,0.18);                 // radio
+  B(0.12,0.08,0.08,M.belt,0.16,1.06,-0.2); B(0.12,0.08,0.08,M.belt,-0.16,1.06,-0.2);                        // pouches round the back
+  { const bat=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.5,6),M.ink); bat.position.set(-0.36,0.92,-0.05); bat.rotation.z=0.12; g.add(bat); }
+  // torso: jacket, shirt V + tie, collar, epaulettes, pockets with flaps, star badge, name tag, shoulder mic
+  const torso=B(0.62,0.74,0.36,M.jacket,0,1.5,0,g,0.04);
+  if(kind==='minion'){ B(0.66,0.62,0.42,M.armor,0,1.52,0,g,0.03); B(0.5,0.18,0.04,M.plate,0,1.62,0.22); B(0.5,0.18,0.04,M.plate,0,1.4,0.22); }
+  else { B(0.22,0.44,0.02,M.shirt,0,1.6,0.185); B(0.07,0.34,0.025,M.tie,0,1.56,0.198); B(0.1,0.06,0.03,M.tie,0,1.76,0.2);
+    for(const sd of [-1,1]){ const col=B(0.14,0.06,0.04,M.jacket,sd*0.09,1.86,0.17); col.rotation.z=sd*0.5;
+      B(0.13,0.12,0.02,M.jacket,sd*0.17,1.45,0.19,g,0.012); B(0.14,0.04,0.025,M.pants,sd*0.17,1.52,0.195); B(0.012,0.12,0.022,M.ink,sd*0.17,1.45,0.196); }   // pockets
+    const star=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.075,0.02,6),M.badge); star.rotation.x=Math.PI/2; star.position.set(-0.17,1.64,0.2); outline(star,0.01); g.add(star);
+    B(0.14,0.04,0.02,M.white,0.17,1.62,0.195);                                                               // name tag
+    B(0.06,0.08,0.05,M.mic,-0.25,1.8,0.12); }
+  for(const sd of [-1,1]) B(0.2,0.04,0.2,kind==='boss'?M.gold:M.jacket,sd*0.33,1.88,0,g,0.015);              // epaulettes
+  // arms: sleeve with an elbow crease and cuff, gloved hand; the right one holds the pistol
+  const armL=limb(0.18,0.68,0.2,M.jacket,1.82), armR=limb(0.18,0.68,0.2,M.jacket,1.82); armL.position.x=-0.42; armR.position.x=0.42; g.add(armL,armR);
+  for(const A of [armL,armR]){ B(0.19,0.03,0.21,M.ink,0,-0.36,0,A); B(0.2,0.06,0.22,kind==='minion'?M.plate:M.shirt,0,-0.64,0,A); B(0.16,0.16,0.16,kind==='boss'?M.white:M.glove,0,-0.76,0.01,A,0.02);
+    if(kind==='minion') B(0.21,0.2,0.22,M.plate,0,-0.12,0,A,0.02); }
+  B(0.07,0.14,0.08,M.gun,0,-0.84,0.06,armR,0.015); B(0.06,0.07,0.24,M.gun,0,-0.78,0.17,armR,0.015);          // pistol: grip + slide
+  // head: neck, ears, nose, eyes or shades, brows, maybe a mustache; cap with band and badge
+  B(0.16,0.12,0.16,skin,0,1.92,0);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.21,14,12),skin); head.scale.set(1,1.08,0.98); head.position.y=2.07; outline(head,0.03); g.add(head);
+  for(const sd of [-1,1]){ const ear=new THREE.Mesh(new THREE.SphereGeometry(0.05,8,6),skin); ear.scale.set(0.5,1,0.8); ear.position.set(sd*0.205,2.06,0); g.add(ear); }
+  B(0.06,0.08,0.07,skin,0,2.04,0.21);
+  if(kind==='minion'){ const helm=new THREE.Mesh(new THREE.SphereGeometry(0.25,14,10,0,Math.PI*2,0,Math.PI*0.6),M.armor); helm.position.y=2.1; outline(helm,0.03); g.add(helm);
+    const visor=B(0.38,0.16,0.06,new THREE.MeshBasicMaterial({color:0x7ff3ff,transparent:true,opacity:0.75}),0,2.08,0.2); visor.rotation.x=-0.15;
+    B(0.36,0.05,0.04,M.plate,0,2.19,0.2); }
+  else { if(Math.random()<0.6||kind==='boss'){ B(0.32,0.07,0.04,M.glass,0,2.11,0.2); B(0.06,0.02,0.01,M.shine,-0.07,2.13,0.225); B(0.06,0.02,0.01,M.shine,0.09,2.13,0.225); }
+      else for(const sd of [-1,1]){ B(0.07,0.05,0.02,M.white,sd*0.08,2.11,0.2); B(0.035,0.04,0.02,M.ink,sd*0.08,2.11,0.21); B(0.09,0.02,0.02,M.ink,sd*0.08,2.16,0.2); }
+    if(Math.random()<0.4) B(0.16,0.04,0.03,M.hair,0,1.99,0.21);                                             // mustache
+    B(0.12,0.015,0.02,M.ink,0,1.95,0.205);                                                                  // mouth
+    const capCrown=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.22,0.16,16),M.cap); capCrown.position.y=2.27; outline(capCrown,0.03); g.add(capCrown);
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(0.225,0.225,0.05,16),kind==='boss'?M.gold:M.ink); band.position.y=2.2; g.add(band);
+    const brim=B(0.32,0.03,0.18,M.ink,0,2.19,0.2,g,0.015); brim.rotation.x=0.22;
+    B(0.07,0.07,0.02,M.badge,0,2.27,0.25); }
+  const stars=new THREE.Group(); stars.position.y=2.55; stars.visible=false; for(let k=0;k<3;k++){ const st=new THREE.Mesh(new THREE.OctahedronGeometry(0.11),M.star); const a=k/3*Math.PI*2; st.position.set(Math.cos(a)*0.4,0,Math.sin(a)*0.4); stars.add(st); } g.add(stars);
+  const flash=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6),new THREE.MeshBasicMaterial({color:0xfff2a8})); flash.position.set(0,-0.78,0.34); flash.visible=false; armR.add(flash);
+  if(kind){ g.traverse(o=>{ if(!o.isMesh||o.userData.isOutline) return; if(o.material===M.jacket) o.material=V.jacket; else if(o.material===M.shirt) o.material=V.shirt; else if(o.material===M.cap) o.material=V.cap; else if(o.material===M.pants&&V.pants) o.material=V.pants; });
+    if(kind==='minion'){ const shield=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.9,0.06),toon(0x9fb4d8)); shield.position.set(0,-0.35,0.22); outline(shield,0.03); armL.add(shield);
+      const win=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.14,0.02),new THREE.MeshBasicMaterial({color:0x2a3448})); win.position.set(0,-0.12,0.26); armL.add(win);
+      const sl=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.06,0.02),M.white); sl.position.set(0,-0.5,0.26); armL.add(sl); }
+    if(kind==='boss'){ const crest=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.3,4),M.badge); crest.position.set(0,2.45,0.12); g.add(crest);
+      const light=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,6),droneRed); light.position.set(0,2.38,0); g.add(light);
+      for(let k=0;k<3;k++) B(0.05,0.08,0.02,M.med[k],0.12+k*0.06,1.66,0.2);                                    // medal ribbons
+      B(0.64,0.36,0.38,V.jacket||M.jacket,0,1.02,0,g,0.03);                                                     // long coat skirt
+      B(0.03,0.36,0.3,M.gold,-0.25,1.65,0.12); } }
+  for(const o of [legL,legR,armL,armR,stars]) o.userData.dyn=true; mergeStatic(g);
+  flash.userData.dyn=true; for(const L of [legL,legR,armL,armR]){ const p=L.position.clone(); L.position.set(0,0,0); mergeStatic(L); L.position.copy(p); }   /* each limb baked in its own pivot space */   /* bake the static uniform into a few meshes: detail without the draw calls */
+  if(kind==='boss') g.scale.setScalar(1.55);
   scene.add(g); return {g,legL,legR,armL,armR,stars,flash,kind:kind||null,pos:new V3(),y:0,yaw:0,daze:0,see:false,losT:0,shootCd:2.5,droneCd:5,wander:null,walk:0,leave:false,flashT:0};
 }
 function eyeLine(a,b){ const d=b.clone().sub(a), L=d.length(), n=Math.max(2,Math.ceil(L/1.8)), q=new V3();
@@ -4120,7 +4167,7 @@ function frame(now){
 requestAnimationFrame(frame);
 window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); pressed.clear(); } };   // debug: advance the simulation without waiting for frames
 window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
-window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS; window.__towers=TOWERS; window.__health=HEALTH;
+window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS; window.__towers=TOWERS; window.__health=HEALTH; window.__camera=camera;
 window.__game={SPIRE,HIDEOUTS,BARRIERS,COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
