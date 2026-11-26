@@ -2715,7 +2715,8 @@ function mirrorPolice(dt){ const S=POLSNAP; if(!S) return; heat=S.heat; spotT=S.
     $('bossinfo').textContent=((S.boss.wv<S.boss.wn||S.boss.min>0)?`SHIELDED BY THE SQUAD · WAVE ${S.boss.wv}/${S.boss.wn} · ${S.boss.min} LEFT`:S.boss.dz?'STUNNED · HIT IT NOW!':`ARMOR ${S.boss.ar}/3 · PAINT IT TO CRACK IT`); BOSS.active=true; BOSS.wave=S.boss.wv||0; BOSS.waves=S.boss.wn||0; BOSS.minions=S.boss.min||0; BOSS.id=S.boss.id||DKEY; } else if(BOSS.active&&!S.boss){ BOSS.active=false; $('bossbar').classList.add('hidden'); }
   const want=new Map(S.c.map(e=>[e[0],e]));
   for(let i=COPS.length-1;i>=0;i--){ const c=COPS[i]; if(!want.has(c.nid)){ scene.remove(c.g); COPS.splice(i,1); } }
-  for(const e of S.c){ let c=COPS.find(c=>c.nid===e[0]); if(!c){ c=makeCop(e[6]===2?'boss':e[6]===1?'minion':null,e[9]===1); c.nid=e[0]; c.pos.set(e[1],e[2],e[3]); c.y=e[2]; if(e[6]){ c.hp=c.maxHp=e[6]===2?12:2; c.armor=3; } COPS.push(c); }
+  for(const e of S.c){ let c=COPS.find(c=>c.nid===e[0]); if(!c){ c=makeCop(e[6]===2?'boss':e[6]===1?'minion':null,e[9]===1); c.nid=e[0]; c.pos.set(e[1],e[2],e[3]); c.y=e[2]; if(e[6]){ c.hp=c.maxHp=e[6]===2?12:(e[9]===1?3:2); c.armor=3; c.chargeCd=4; c.callCd=8; } COPS.push(c); }
+    if(e[6]===2){ BOSS.boss=c; if(S.boss){ c.hp=S.boss.hp; c.maxHp=S.boss.max; c.armor=S.boss.ar; } }   /* keep the boss's real health so a guest can take over the fight if the host leaves */
     const k=Math.min(1,dt*10), ox=c.pos.x, oz=c.pos.z; c.pos.x=lerp(c.pos.x,e[1],k); c.pos.z=lerp(c.pos.z,e[3],k); c.y=lerp(c.y,e[2],k); c.yaw+=angDiff(c.yaw,e[4])*k; c.daze=e[5]?1:0; c.see=!!e[7];
     c.g.position.set(c.pos.x,c.y,c.pos.z); c.g.rotation.y=c.yaw; c.stars.visible=!!e[5]; if(e[5]) c.stars.rotation.y+=dt*5; c.flash.visible=!!e[8];
     const mv=Math.hypot(c.pos.x-ox,c.pos.z-oz)/Math.max(dt,1e-3); c.walk+=mv*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,mv/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armR.rotation.x=c.see?-1.45:sw*0.8; }
@@ -3965,7 +3966,7 @@ function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
 // as the second character model with a name tag. Tags are crew-shared: anyone's claim counts for the whole room.
 const MP={ws:null,ch:null,live:false,id:0,room:'',want:false,peers:new Map(),sendT:0,model:null,modelLoading:false,pending:[]};
 // backend: Supabase Realtime (private channels, access-code login) when online-config.js is filled in, else the local node relay
-const ONLINE=window.JSR_ONLINE||{}, SUPA=!!(ONLINE.supabaseUrl&&ONLINE.supabaseKey);
+const ONLINE=window.JSR_ONLINE||{}, SUPA=!!(ONLINE.supabaseUrl&&ONLINE.supabaseKey)&&!/[?&]mp=local/.test(location.search);   /* ?mp=local: test crews on the local relay (tools/mp_server.js) */
 let SBC=null; async function sbClient(){ if(SBC) return SBC; const {createClient}=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
   SBC=createClient(ONLINE.supabaseUrl,ONLINE.supabaseKey,{auth:{persistSession:true,storageKey:'jsr-auth'}}); return SBC; }
 const normCode=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9-]/g,'').slice(0,24);
