@@ -1741,7 +1741,7 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
       else { const cx=ax?mx:mx+off, cz=ax?mz+off:mz; box2(cx-1.2,cx+1.2,cz-1.2,cz+1.2,y,y+0.6,toon(0x777b70)); const l=new THREE.Mesh(new THREE.IcosahedronGeometry(1.3,0),leafMat); l.position.set(cx,y+1.6,cz); outline(l,0.05); world.add(l); } }
     if(k%4===1) xc(mx,y+1.2,mz);
     const tr=new THREE.Mesh(new THREE.BoxGeometry(ax?L:1.4,1.8,ax?1.4:L),SKYM.truss); tr.position.set(mx,y-1.7,mz); world.add(tr); k++; }
-  FLOOR.decks=decks.length;
+  FLOOR.decks=decks.length; FLOOR.deckRects=decks.map(d=>d.rr);
   for(const T of TOWERS.filter(t=>t.sky)){ const [x0,x1,z0,z1]=T.r;   /* short catwalks from each 40m tower roof to the Sky Floor */
     for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const ex=dx>0?x1:dx<0?x0:T.x, ez=dz>0?z1:dz<0?z0:T.z; let g=0;
       for(let q=0.5;q<=9;q+=0.5) if(Math.abs(ground(ex+dx*q,ez+dz*q,y+0.6).h-y)<0.3){ g=q; break; } if(!g) continue;
@@ -1763,6 +1763,24 @@ function buildSkyFloor(){ const y=SKYY, grid=[-120,-60,0,60,120], made=[];
     for(let i=0;i<C.N;i++) for(let j=0;j<C.N;j++){ if(!C.occ[i][j]) continue; const px=C.O+(i+0.5)*C.T, pz=C.O+(j+0.5)*C.T, d=Math.hypot(px-isl.x,pz-isl.z); if(d>isl.S/2+14&&d<bd&&d<70){ bd=d; tgt=[px,pz]; } }
     if(!tgt) continue; const d=new V3(tgt[0]-isl.x,0,tgt[1]-isl.z).normalize(); { const sx0=isl.x+d.x*(isl.S/2-0.3), sz0=isl.z+d.z*(isl.S/2-0.3); let clear=true; for(let u=0.08;u<0.95;u+=0.06){ const px=sx0+(tgt[0]-sx0)*u, pz=sz0+(tgt[1]-sz0)*u, py=y+0.12+(MIDY+0.6-y-0.12)*u; if(!riderClear(px,pz,py,0.3)) { clear=false; break; } } if(!clear) continue; } addRail([[isl.x+d.x*(isl.S/2-0.3),y+0.12,isl.z+d.z*(isl.S/2-0.3)],[tgt[0],MIDY+0.6,tgt[1]]],{color:0x7ff3ff,radius:0.08}); down++; }
   FLOOR.skyVents=up; FLOOR.cables=down; }
+/* HEALTH PACKS: green-cross med crates scattered over the Mid and Sky floors. +40 health, back 30s after you take one */
+const HEALTH=[], HPM={ box:toon(0xf4efe3), plus:new THREE.MeshBasicMaterial({color:0x37d67a}), glow:new THREE.MeshBasicMaterial({color:0x37d67a,transparent:true,opacity:0.25,depthWrite:false}) };
+function addHealth(x,y,z){ const g=new THREE.Group(); g.position.set(x,y+1,z);
+  const b=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.9,0.9),HPM.box); outline(b,0.05); g.add(b);
+  for(const [w,h] of [[0.62,0.2],[0.2,0.62]]) for(const s2 of [-1,1]){ const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),HPM.plus); p1.position.z=s2*0.46; if(s2<0) p1.rotation.y=Math.PI; g.add(p1);
+    const p2=new THREE.Mesh(new THREE.PlaneGeometry(w,h),HPM.plus); p2.position.x=s2*0.46; p2.rotation.y=s2*Math.PI/2; g.add(p2); }
+  const halo=new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.05,16),HPM.glow); halo.position.y=-0.95; g.add(halo);
+  g.userData.dyn=true; scene.add(g); HEALTH.push({g,x,y,z,t:0,base:y+1}); }
+function buildHealth(){ const spots=[], ok=(x,z,y)=>Math.abs(ground(x,z,y+2).h-y)<0.3&&riderClear(x,z,y+0.3,0.5)&&!spots.some(q=>Math.hypot(q[0]-x,q[2]-z)<22);
+  const mids=FLOOR.skyways.map(s2=>s2.rect).sort((a,b)=>((a[0]*7+a[2]*13)&31)-((b[0]*7+b[2]*13)&31));
+  let m=0; for(const r of mids){ if(m>=7) break; for(const [fx,fz] of [[0.3,0.7],[0.7,0.3],[0.5,0.5]]){ const x=r[0]+(r[1]-r[0])*fx, z=r[2]+(r[3]-r[2])*fz; if(ok(x,z,MIDY)){ spots.push([x,MIDY,z]); m++; break; } } }
+  const tops=FLOOR.islands.map(i=>i.rect).concat(FLOOR.deckRects||[]).sort((a,b)=>((a[0]*11+a[2]*5)&31)-((b[0]*11+b[2]*5)&31));
+  let k=0; for(const r of tops){ if(k>=7) break; for(const [fx,fz] of [[0.25,0.75],[0.75,0.25],[0.5,0.5],[0.3,0.3]]){ const x=r[0]+(r[1]-r[0])*fx, z=r[2]+(r[3]-r[2])*fz; if(ok(x,z,SKYY)){ spots.push([x,SKYY,z]); k++; break; } } }
+  if(FLOOR.summit) spots.push([FLOOR.summit.x+3,FLOOR.summit.y,FLOOR.summit.z-3]);
+  for(const [x,y,z] of spots) addHealth(x,y,z); FLOOR.health={mid:m,sky:k}; }
+function healthTick(dt){ for(const h of HEALTH){ if(h.t>0){ h.t-=dt; if(h.t<=0) h.g.visible=true; continue; }
+    h.g.rotation.y+=dt*1.8; h.g.position.y=h.base+Math.sin(clock*2.4+h.x)*0.15;
+    if(state==='play'&&P.hp<100&&Math.abs(P.pos.x-h.x)<1.6&&Math.abs(P.pos.z-h.z)<1.6&&Math.abs(P.pos.y-h.y)<2.2){ P.hp=Math.min(100,P.hp+40); h.t=30; h.g.visible=false; popup('+40 HEALTH'); blip(880,0.08,'triangle',0.1); blip(1320,0.1,'triangle',0.08); emit(new V3(h.x,h.y+1,h.z),new V3(0,3,0),0x37d67a,0.6,0.2,-1); } } }
 function floorTags(){   // spread pieces over every storey: 2 street walls under the decks, 5 on the Mid Floor, 15 up on the Sky Floor
   const mids=FLOOR.plazas.map(p=>[p.x,p.z,p.rect]).concat(FLOOR.skyways.map(s2=>{ const u=(s2.a0+s2.a1)/2; return [s2.axis==='x'?u:s2.c,s2.axis==='x'?s2.c:u,s2.rect]; }));
   const L1=D.tags.filter(t=>t[1]<8).length, GW=Math.max(2,Math.min(5,15-L1)), MW=7-GW;
@@ -1868,7 +1886,7 @@ const EXTRA_TAGS=31;   // per district: three hidden courtyards + the third comp
 const SPIRE=spire(), HIDEOUTS=[hideout(),hideout()];
 const COURTS=[0,1,2].map(()=>{ let ok=courtyard('push'); if(!ok){ IGNORE_SKATE=true; ok=courtyard('push'); IGNORE_SKATE=false; } return ok; });
 const TOWERS=cityTowers();
-buildMidFloor(); buildSkyFloor(); floorTags();
+buildMidFloor(); buildSkyFloor(); floorTags(); buildHealth();
 const CHAINS=Array.from({length:6},()=>chainBlock()).filter(Boolean).length;
 const MEGA=megaRamps();
 const FILLERS=fillBuildings(22), BRIDGES=skybridges(10), PROPS=streetProps(45), CARS=spawnTraffic();
@@ -2505,7 +2523,8 @@ function bossReset(){ if(!BOSS.active) return; BOSS.active=false; $('bossbar').c
 function updateBossHUD(){ const b=BOSS.boss; if(!b) return; $('bossfill').style.width=Math.max(0,b.hp/b.maxHp*100)+'%'; $('bossarmor').style.width=(b.daze>0?0:b.armor/3*100)+'%';
   const t=(b.daze>0?'STUNNED · HIT IT NOW!':`ARMOR ${b.armor}/3 · PAINT IT TO CRACK IT`)+` · MINIONS ${BOSS.minions}`; if($('bossinfo').textContent!==t) $('bossinfo').textContent=t; }
 function updatePolice(dt){
-  P.sprayCd=Math.max(0,(P.sprayCd||0)-dt); P.hurtT=(P.hurtT||0)+dt; if(P.hurtT>6&&P.hp<100) P.hp=Math.min(100,P.hp+6*dt);
+  P.sprayCd=Math.max(0,(P.sprayCd||0)-dt); P.hurtT=(P.hurtT||0)+dt; if(P.hurtT>6&&P.hp<100&&P.pos.y<8) P.hp=Math.min(100,P.hp+6*dt);   /* only the street heals you; up on the Mid and Sky floors you hunt for health packs */
+  healthTick(dt);
   if(!policeHost()){ mirrorPolice(dt); return; }                       // a crewmate runs the cops; we just show them
   if(TAGM.active) heat=0;                                              // tag mode: the cops stand down for the crew
   const TG=crewTargets();
@@ -3881,6 +3900,7 @@ const TIPS={ start:'Skate to the pink arrows and TAG them · the pointer shows t
   grind:'JUMP onto a rail to GRIND · SPACE again to hop off', wall:'JUMP while skating alongside a wall to WALL RIDE',
   boost:'Hold SHIFT / RT to BOOST · grinding fills it · boost through a long grind for 2X BOOST', kicker:'Tap SPACE just before you land for a PERFECT LANDING',
   flow:'Keep moving and chaining moves to raise STYLE FLOW · the music builds with it', drone:'COPS! Spray them (E / RB) to daze them · stomp drones · break line of sight to lose stars', flip:'IN THE AIR: SPACE/✕ flip · J/○ spin · K/□ grab · L/△ kick · press two together for combo tricks' };
+TIPS.health='Up on the Mid and Sky floors your health won\'t come back on its own · find the green + HEALTH packs';
 let tipSeen={}; try{ tipSeen=JSON.parse(localStorage.getItem('inkline_tips')||'{}')||{}; }catch(e){}
 let tipT=0, tipQ=[], tipCheck=0;
 let hintsOn=true; try{ hintsOn=localStorage.getItem('inkline_hints')!=='0'; }catch(e){}
@@ -3899,7 +3919,7 @@ function updateTips(dt){
     if(P.sprayTarget) tip('tag');
     if(clock>4&&!P.grind){ for(const r of rails){ if(railClosest(r,P.pos).d2<36){ tip('grind'); break; } } }
     if(P.grounded&&hs>8){ for(const w of WALLS){ const dx=P.pos.x-clamp(P.pos.x,w.x0,w.x1), dz=P.pos.z-clamp(P.pos.z,w.z0,w.z1); if(dx*dx+dz*dz<4&&w.top>4){ tip('wall'); break; } } }
-    if(clock>20) tip('boost'); if(P.gs&&P.gs.type==='ramp'&&!P.gs.qp) tip('kicker'); if(clock>45||FLOW.state>0) tip('flow'); if(heat>0) tip('drone'); if(clock>6&&(!P.grounded||P.grind)) tip('flip'); }
+    if(clock>20) tip('boost'); if(P.gs&&P.gs.type==='ramp'&&!P.gs.qp) tip('kicker'); if(clock>45||FLOW.state>0) tip('flow'); if(heat>0) tip('drone'); if(P.hp<100&&P.pos.y>=8) tip('health'); if(clock>6&&(!P.grounded||P.grind)) tip('flip'); }
   if(tipT>0){ tipT-=dt; if(tipT<=0) $('tip').classList.add('hidden'); }
   else if(tipQ.length){ $('tip').textContent=tipQ.shift(); $('tip').classList.remove('hidden'); tipT=4.5; }
 }
@@ -3935,7 +3955,7 @@ function frame(now){
 requestAnimationFrame(frame);
 window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); pressed.clear(); } };   // debug: advance the simulation without waiting for frames
 window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
-window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS; window.__towers=TOWERS;
+window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS; window.__towers=TOWERS; window.__health=HEALTH;
 window.__game={SPIRE,HIDEOUTS,BARRIERS,COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
