@@ -162,7 +162,7 @@
   <div class="sub">FREQUENCY ZERO</div>
   <div class="hidden" id="dname">HARBOR HEIGHTS</div>
   <div class="row"><span>CREW TAG</span><input id="crew" maxlength="8" value="NOVA" spellcheck="false"></div>
-  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="charbtn" class="tool">CHARACTER: CROWN</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
+  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="charbtn" class="tool">CHARACTER: CROWN</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="levelbtn" class="tool hidden">LEVEL: STORY</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
   <div class="note" id="padhint">On a phone or tablet: pair your PlayStation or Xbox controller in Bluetooth settings, then press any button on it.</div>
   <button id="continue" class="hidden">CONTINUE</button>
   <button id="start">SKATE!</button>
@@ -244,7 +244,7 @@
   <div id="rank">A</div>
   <div class="sub hidden" id="newbest" style="background:var(--lime);color:#111">NEW BEST!</div>
   <div class="stats" id="endstats"></div>
-  <div class="row"><button id="again">RUN IT BACK</button><button id="nextd" class="tool">NEXT DISTRICT →</button></div>
+  <div class="row"><button id="again">RUN IT BACK</button><button id="nextd" class="tool">NEXT DISTRICT →</button><button id="afterbtn" class="hidden">PLAY AFTER HOURS →</button></div>
 </div>
 
 <script>(function(){ const f=()=>{ const s=Math.max(0.48,Math.min(1,innerWidth/1180,innerHeight/760)); document.documentElement.style.setProperty('--ui',s.toFixed(3)); };
@@ -1775,9 +1775,9 @@ mergeStatic(world); mergeStatic(scene.userData.skyDeco);
 renderer.compile(scene,camera);
 
 // ====================================================================== SKATER (original character "Nova")
-function makeSkater(){
+function makeSkater(pal){
   const root=new THREE.Group(), body=new THREE.Group(); body.position.y=0.9; root.add(body);
-  const C={skin:0xf2c09a, jacket:0xf2a52f, pants:0x39413c, skate:0xd9e84b, hair:0xe94b42, phones:0x39a6b8, wheel:0x111111};
+  const C=Object.assign({skin:0xf2c09a, jacket:0xf2a52f, pants:0x39413c, skate:0xd9e84b, hair:0xe94b42, phones:0x39a6b8, wheel:0x111111},pal||{});
   const part=(geo,col,x,y,z,parent,ot=0.035)=>{ const m=new THREE.Mesh(geo,toonChar(col)); m.position.set(x,y,z); m.castShadow=true; outline(m,ot,OUTLINE_CHAR); parent.add(m); return m; };
   const leg=(side)=>{
     const hip=new THREE.Group(); hip.position.set(side*0.15,0,0); body.add(hip);
@@ -1811,6 +1811,10 @@ function makeSkater(){
   return {root,body,L,R:Rr,aL,aR,torso,head};
 }
 const SK=makeSkater(); scene.add(SK.root);
+// ZERO -- the unlockable from the Gold Record: white-gold kit, cyan phones, a halo that never stops spinning
+function makeZeroSkater(){ const r=makeSkater({skin:0xc98b62, jacket:0xf4efe3, pants:0x1b1f3a, skate:0xf2c83a, hair:0xf2c83a, phones:0x7ff3ff});
+  const halo=new THREE.Mesh(new THREE.TorusGeometry(0.32,0.05,8,28),new THREE.MeshBasicMaterial({color:0xffe27a})); halo.rotation.x=Math.PI/2; halo.position.y=2.3; halo.userData.dyn=true; r.root.add(halo);
+  (scene.userData.spinners??=[]).push(dt=>{ halo.rotation.z+=dt*2.2; }); return r; }
 
 // ---------------------------------------------------------------- custom character (GLB of named rigid parts)
 // The model has no skeleton, so it is rigged by part names: every piece is parented to a joint pivot
@@ -2088,11 +2092,17 @@ function loadPlayerModel(url,onFail){
   },undefined,()=>onFail&&onFail());
 }
 // ---------------------------------------------------------------- character select (title screen); remembered per device, sent to other players online
+let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'{}')||{}; }catch(e){}
+const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
+let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
+const AFTER=()=>LEVEL==='after';
 const CHARS=[ {id:'crown',label:'CROWN',url:PLAYER_GLB}, {id:'punk',label:'PUNK',url:CHARACTER_URL,parts:true}, {id:'classic',label:'CLASSIC'} ];
+if(UNLOCK.zero) CHARS.push({id:'zero',label:'ZERO'});
 let CHAR='crown';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
   if(c.id==='classic'){ applyPlayerRig(makeSkater()); return; }
+  if(c.id==='zero'){ applyPlayerRig(makeZeroSkater()); return; }
   if(c.parts){ new GLTFLoader().load(c.url,gltf=>{ if(CHAR!==c.id) return; try{ applyPlayerRig(rigFromParts(gltf.scene)); }catch(err){ console.warn('PUNK rig failed',err); applyPlayerRig(makeSkater()); } }); return; }
   loadPlayerModel(c.url,()=>applyPlayerRig(makeSkater())); }
 // a custom Mixamo model dropped in as characters/player.glb shows up as an extra choice
@@ -2236,8 +2246,8 @@ function bossSpawnPoint(minD,maxD){ for(let k=0;k<120;k++){ const a=Math.random(
   return new V3(...D.spawn); }
 function startBoss(){ if(BOSS.active||bossesBeaten.includes(DKEY)||!policeHost()) return; clearPolice(); BOSS.active=true; heat=5;
   P.cans=Math.min(40,P.cans+10); P.bossCp=P.checkpoint?P.checkpoint.clone():P.pos.clone();
-  const b=makeCop('boss'); b.hp=b.maxHp=12; b.armor=3; b.chargeCd=4; b.callCd=8; b.shootCd=3; b.pos.copy(bossSpawnPoint(26,40)); b.y=b.pos.y; b.g.position.copy(b.pos); COPS.push(b); BOSS.boss=b;
-  for(let i=0;i<6;i++){ const m=makeCop('minion'); m.hp=m.maxHp=2; m.shootCd=2+Math.random()*2; m.pos.copy(bossSpawnPoint(18,34)); m.y=m.pos.y; m.g.position.copy(m.pos); COPS.push(m); }
+  const b=makeCop('boss'); b.hp=b.maxHp=AFTER()?18:12; b.armor=3; b.chargeCd=4; b.callCd=8; b.shootCd=3; b.pos.copy(bossSpawnPoint(26,40)); b.y=b.pos.y; b.g.position.copy(b.pos); COPS.push(b); BOSS.boss=b;
+  for(let i=0;i<6;i++){ const m=makeCop('minion'); m.hp=m.maxHp=AFTER()?3:2; m.shootCd=2+Math.random()*2; m.pos.copy(bossSpawnPoint(18,34)); m.y=m.pos.y; m.g.position.copy(m.pos); COPS.push(m); }
   BOSS.minions=6; $('bossname').textContent=BOSSES[DKEY]||'THE CHIEF'; $('bossbar').classList.remove('hidden');
   message(`BOSS BATTLE<br><span style="font-size:22px">${BOSSES[DKEY]} AND THE RIOT SQUAD · PAINT THEM TO STUN, THEN HIT THEM</span>`,3.2); sfx.alarm&&sfx.alarm(); rumble(0.6,0.9,400); updateBossHUD(); }
 function bossDamage(c,n,why){ c.hp-=n; popup(`${why} -${n}`,'big'); for(let i=0;i<20;i++) emit(c.pos.clone().setY(c.y+1.5),rv(6),[0xff3d8b,0x3fd4ff,0xd9e84b][i%3],0.6,0.3,6); rumble(0.3,0.6,120);
@@ -2247,7 +2257,7 @@ function bossDamage(c,n,why){ c.hp-=n; popup(`${why} -${n}`,'big'); for(let i=0;
   else bossDefeated(); updateBossHUD(); }
 function bossDefeated(){ BOSS.active=false; bossesBeaten.push(DKEY); for(const c of COPS) scene.remove(c.g); COPS.length=0; for(const d of PDRONES) scene.remove(d.g); PDRONES.length=0;
   heat=0; evadeT=0; lastKnown=null; score+=5000; trick('BOSS DOWN',2500); flowAdd(50); $('bossbar').classList.add('hidden'); sfx.secret&&sfx.secret(); rumble(0.8,1,700);
-  if(tagsDone>=TOTAL_TAGS&&bossesBeaten.length>=Object.keys(DISTRICTS).length){ message('CITY CLAIMED!',3); winTimer=2.5; }
+  if(tagsDone>=TOTAL_TAGS&&bossesBeaten.length>=Object.keys(DISTRICTS).length)cityClaimed();
   else message(`DISTRICT LIBERATED!<br><span style="font-size:22px">${BOSSES[DKEY]} IS DOWN · TAKE A TUNNEL TO THE NEXT DISTRICT</span>`,3.4);
   saveRun(); }
 function bossReset(){ if(!BOSS.active) return; BOSS.active=false; $('bossbar').classList.add('hidden'); setTimeout(()=>{ if(state==='play') startBoss(); },2600); }   // busted mid-fight: the fight restarts
@@ -2258,7 +2268,7 @@ function updatePolice(dt){
   if(!policeHost()){ mirrorPolice(dt); return; }                       // a crewmate runs the cops; we just show them
   if(TAGM.active) heat=0;                                              // tag mode: the cops stand down for the crew
   const TG=crewTargets();
-  const want=heat>0?Math.min(8,Math.round(heat*1.6)):0;
+  const want=heat>0?Math.min(AFTER()?11:8,Math.round(heat*(AFTER()?2.3:1.6))):0;
   if(heat>0&&!lastKnown&&(P.dispatchT=(P.dispatchT||0)-dt)<=0){ P.dispatchT=7; P.dispatch=TG[Math.floor(Math.random()*TG.length)].pos.clone().add(new V3((Math.random()-0.5)*24,0,(Math.random()-0.5)*24)); }   // dispatch knows the rough area
   copSpawnT-=dt; if(!BOSS.active&&COPS.filter(c=>!c.leave&&!c.kind).length<want&&copSpawnT<=0){ const sp=copSpawnPoint(); copSpawnT=sp?1.2:0.25; if(sp){ const c=makeCop(); c.pos.copy(sp); c.g.position.copy(sp); COPS.push(c); } }
   if(heat===0&&!BOSS.active) for(const c of COPS) if(!c.kind) c.leave=true;
@@ -2281,7 +2291,7 @@ function updatePolice(dt){
     let tgt=c.kind?TP:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.see?TP:(lastKnown||(heat>0?P.dispatch:null));
     if(!tgt||(!c.see&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
     if(c.detour){ if((c.detourT-=dt)<=0||c.detour.distanceTo(c.pos)<1.5) c.detour=null; else tgt=c.detour; }
-    const tx=tgt.x-c.pos.x, tz=tgt.z-c.pos.z, tl=Math.hypot(tx,tz)||1, spd=c.see?(dist>16?8.2:6.5):c.leave?4:6;
+    const tx=tgt.x-c.pos.x, tz=tgt.z-c.pos.z, tl=Math.hypot(tx,tz)||1, spd=(c.see?(dist>16?8.2:6.5):c.leave?4:6)*(AFTER()?1.15:1);
     // steering: the straight line first, then fanned angles round whatever is in the way
     let mx=0, mz=0; const a0=Math.atan2(tx,tz), side=(i%2?1:-1);
     for(const off of [0,0.6*side,-0.6*side,1.2*side,-1.2*side,1.75*side,-1.75*side]){ const a=a0+off, sx=Math.sin(a)*spd*dt, sz=Math.cos(a)*spd*dt; if(!blocked(c.pos.x+sx,c.pos.z+sz,c.y)){ mx=sx; mz=sz; break; } }
@@ -2476,7 +2486,7 @@ function updateFlow(dt){
 function popup(text,cls=''){ const d=document.createElement('div'); d.className='pop '+cls; d.textContent=text; d.style.top=(Math.random()*30-15)+'px'; $('popups').appendChild(d); setTimeout(()=>d.remove(),1000); }
 let msgT=0; function message(t,dur=2){ $('msg').innerHTML=t; $('msg').style.opacity=1; msgT=dur; }
 function trick(name,pts){ C.pts+=pts; C.mult=Math.min(C.mult+1,25); C.timer=CFG.COMBO_T; C.list.push(name); if(C.list.length>5) C.list.shift(); popup(`${name} +${pts}`); flowAdd(Math.min(12,pts/25)); }
-function bankCombo(){ if(C.pts>0){ const total=Math.round(Math.round(C.pts)*Math.max(1,C.mult)*FLOW.mult[FLOW.state]); score+=total; bestCombo=Math.max(bestCombo,total);
+function bankCombo(){ if(C.pts>0){ const total=Math.round(Math.round(C.pts)*Math.max(1,C.mult)*FLOW.mult[FLOW.state]*(AFTER()?1.5:1)); score+=total; bestCombo=Math.max(bestCombo,total);
     if(C.mult>1) popup(`+${total.toLocaleString()}`,'big'); flowAdd(Math.min(10,total/1000)); } C.pts=0; C.mult=0; C.list=[]; }
 function dropCombo(){ if(C.pts>0) popup('BAIL!','bad'); C.pts=0; C.mult=0; C.list=[]; }
 function bail(){ rumble(0.9,0.6,320); if(P.wall) endWall(); P.knock=1.0; P.trick=null; P.vel.multiplyScalar(0.25); P.vel.y=0; dropCombo(); flowAdd(-25); sfx.bail();
@@ -2575,14 +2585,14 @@ function completeTag(t){
   if(t.mural){ trick('MURAL!',2500); flowAdd(40); message('MURAL COMPLETE',2.4); } else { trick('TAG!',400); flowAdd(18); }
   if(SK.onEvent) SK.onEvent('tag');
   sfx.tag();
-  P.heatGrace=12; if(heat<5){ heat++; evadeT=0; message(`WANTED ${'★'.repeat(heat)}<br><span style="font-size:22px">${heat===1?'THE COPS ARE ON THEIR WAY':'MORE COPS INBOUND'}</span>`,2.2); sfx.alarm(); }
+  P.heatGrace=AFTER()?9:12; if(heat<5){ heat=Math.min(5,heat+(AFTER()?2:1)); evadeT=0; message(`WANTED ${'★'.repeat(heat)}<br><span style="font-size:22px">${heat===1?'THE COPS ARE ON THEIR WAY':'MORE COPS INBOUND'}</span>`,2.2); sfx.alarm(); }
   lastKnown=P.pos.clone();   // a fresh tag gives your spot away
   { const cx=t.pos.x+t.n.x*2.2, cz=t.pos.z+t.n.z*2.2; P.checkpoint=new V3(cx,ground(cx,cz,t.pos.y).h+0.05,cz); }   // every tag is a checkpoint
   tagsByDistrict[DKEY]=tagSpots.map((s,i)=>s.done?i:-1).filter(i=>i>=0);
   mpSend({t:'tag',d:DKEY,i:tagSpots.indexOf(t)}); saveRun();
   if(tagSpots.every(s=>s.done)){
     if(!bossesBeaten.includes(DKEY)) setTimeout(()=>{ if(state==='play') startBoss(); },1800);              // every tag claimed: the boss comes for you
-    else if(tagsDone>=TOTAL_TAGS&&bossesBeaten.length>=Object.keys(DISTRICTS).length){ message('CITY CLAIMED!',3); winTimer=2.5; }
+    else if(tagsDone>=TOTAL_TAGS&&bossesBeaten.length>=Object.keys(DISTRICTS).length)cityClaimed();
     else message(`DISTRICT CLAIMED!<br><span style='font-size:22px'>TAKE A TUNNEL TO THE NEXT ONE</span>`,3); }
 }
 
@@ -2972,7 +2982,7 @@ function update(dt){
       for(let i=0;i<8;i++) emit(c.m.position,rv(5),0xffffff,0.4,0.12,0); }
   }
   // drones
-  updateTraffic(dt); boundsCheck(dt); barrierCheck(); layerTick(dt);
+  updateTraffic(dt); boundsCheck(dt); barrierCheck(); layerTick(dt); eggTick(dt);
   updatePolice(dt);
 }
 
@@ -3334,7 +3344,7 @@ function checkGates(){
 function travelTo(to){
   traveling=true; if(P.grind) endGrind(); bankCombo();
   tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0);
-  const payload={to,from:DKEY,t:Date.now(),bossesBeaten,speed:Math.max(12,Math.hypot(P.vel.x,P.vel.z)),score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,flow:FLOW.v,bestCombo,stance:P.stance,heat};
+  const payload={to,from:DKEY,t:Date.now(),eggActive,bossesBeaten,speed:Math.max(12,Math.hypot(P.vel.x,P.vel.z)),score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,flow:FLOW.v,bestCombo,stance:P.stance,heat};
   try{ sessionStorage.setItem('jsr_travel',JSON.stringify(payload)); localStorage.setItem('inkline_district',to); }catch(e){}
   saveRun(to);
   $('tname').textContent=DISTRICTS[to].name; const tn=$('tunnel'); tn.classList.remove('hidden','tunnel-out'); tn.style.display='flex';
@@ -3343,7 +3353,7 @@ function travelTo(to){
   tn.classList.add('quick'); setTimeout(()=>{ location.hash=to; location.reload(); },350);
 }
 function arriveFrom(tr){
-  score=tr.score; bossesBeaten=tr.bossesBeaten||[]; runTime=tr.runTime||0; tagsDone=tr.tagsDone; tagsByDistrict=tr.tagsByDistrict||{}; secrets=tr.secrets||[]; bestCombo=tr.bestCombo||0; heat=tr.heat||0;
+  score=tr.score; bossesBeaten=tr.bossesBeaten||[]; if(tr.eggActive){ eggActive=true; spawnEgg(); } runTime=tr.runTime||0; tagsDone=tr.tagsDone; tagsByDistrict=tr.tagsByDistrict||{}; secrets=tr.secrets||[]; bestCombo=tr.bestCombo||0; heat=tr.heat||0;
   P.cans=tr.cans; P.boost=tr.boost; FLOW.v=tr.flow||0; P.stance=tr.stance||1;
   for(const i of tagsByDistrict[DKEY]||[]){ const t=tagSpots[i]; if(!t||t.done) continue; t.done=true; ensureDecal(t); t.decal.material.opacity=1; t.pop=1; t.frame.visible=false; t.arrow.visible=false; }
   if(secrets.includes(DKEY)){ golden.active=false; golden.m.visible=false; golden.t=1e9; }
@@ -3361,6 +3371,30 @@ addEventListener('keydown',resumeAudio); addEventListener('mousedown',resumeAudi
 document.addEventListener('visibilitychange',()=>{ if(!AU.ctx) return; if(document.hidden) AU.ctx.suspend(); else if(!paused) AU.ctx.resume(); });
 
 const fmtTime=t=>{ const h=Math.floor(t/3600), m=Math.floor(t/60)%60, s=Math.floor(t%60); return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0'); };
+
+// ====================================================================== EASTER EGG: the Gold Record
+// Claim the whole city and a big soft gold record appears somewhere hard to reach (follow the light).
+// Grab it to unlock ZERO and the AFTER HOURS level for good.
+let EGG=null, eggActive=false;
+function cityClaimed(){ if(eggActive||EGG){ return; } eggActive=true; spawnEgg(); score+=AFTER()?7500:5000; saveRun();
+  message(`CITY CLAIMED!<br><span style="font-size:22px">SOMETHING GOLDEN JUST APPEARED · FOLLOW THE LIGHT</span>`,4); sfx.secret&&sfx.secret(); }
+function eggSpot(){ if(window.__spire){ const S=__spire.S3; return new V3(S.x,46+1.9,S.z); }
+  const top=FILL.slice().sort((a,b)=>b.h-a.h)[0]; return top?new V3((top.x0+top.x1)/2,top.h+1.9,(top.z0+top.z1)/2):new V3(D.golden[0],D.golden[1]+1,D.golden[2]); }
+function recordTex(){ return canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#f2c83a'; g.beginPath(); g.arc(128,128,126,0,7); g.fill(); g.strokeStyle='rgba(120,80,10,.35)'; g.lineWidth=3; for(let r=40;r<124;r+=9){ g.beginPath(); g.arc(128,128,r,0,7); g.stroke(); }
+  g.fillStyle='#1b1724'; g.beginPath(); g.arc(128,128,34,0,7); g.fill(); g.fillStyle='#ff3d8b'; g.font='bold 44px Bungee, Impact'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('0',128,131); }); }
+function spawnEgg(){ if(EGG) return; const pos=eggSpot(), g=new THREE.Group(); g.position.copy(pos); g.userData.dyn=true;
+  const tex=recordTex(), face=new THREE.MeshBasicMaterial({map:tex}), rim=metal(0xf2c83a);
+  const coin=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,0.32,40),[rim,face,face]); coin.rotation.x=Math.PI/2; outline(coin,0.06); g.add(coin);
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(0.7,1.1,260,16,1,true),new THREE.MeshBasicMaterial({color:0xffd45a,transparent:true,opacity:0.22,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,fog:false}));
+  beam.position.y=130; g.add(beam); scene.add(g); EGG={g,coin,pos,t:0}; }
+function eggTick(dt){ if(!EGG) return; EGG.t+=dt; const g=EGG.g; g.rotation.y+=dt*1.6; g.position.y=EGG.pos.y+Math.sin(EGG.t*2)*0.25;
+  const sq=1+Math.sin(EGG.t*5)*0.08; EGG.coin.scale.set(sq,1/sq,sq);                           // soft: it wobbles like jelly
+  if(Math.random()<0.4) emit(EGG.pos.clone().add(rv(2.4)),new V3(0,1.5,0),0xffe27a,0.7,0.16,-1);
+  if(state==='play'&&P.pos.distanceTo(g.position)<2.6) collectEgg(); }
+function collectEgg(){ scene.remove(EGG.g); EGG=null; eggActive=false; const first=!UNLOCK.zero; UNLOCK.zero=true; UNLOCK.afterHours=true; saveUnlocks();
+  if(!CHARS.some(c=>c.id==='zero')) CHARS.push({id:'zero',label:'ZERO'}); score+=10000; trick('GOLD RECORD',5000); sfx.secret&&sfx.secret(); rumble(1,1,900);
+  for(let i=0;i<60;i++) emit(P.pos.clone().setY(P.pos.y+1.5),rv(12),i%2?0xffe27a:0xff3d8b,1,0.35,4);
+  message(`YOU FOUND THE GOLD RECORD!<br><span style="font-size:22px">${first?'NEW CHARACTER: ZERO · NEW LEVEL: AFTER HOURS':'+10,000 · THE CITY REMEMBERS'}</span>`,4.5); saveRun(); winTimer=5; }
 // ====================================================================== GAME FLOW
 function startGame(tr){
   crew=($('crew').value||'NOVA').toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8)||'NOVA';
@@ -3380,19 +3414,24 @@ function endGame(win){
   const rank=score>=40000?'S':score>=24000?'A':score>=12000?'B':score>=5000?'C':'D';
   try{ document.exitPointerLock(); }catch(e){}
   $('hud').classList.add('hidden'); $('tip').classList.add('hidden'); $('end').classList.remove('hidden'); $('flowfx').style.opacity=0;
-  $('endtitle').textContent=win?'CITY CLAIMED':'RUN OVER';
+  $('endtitle').textContent=win?(AFTER()?'AFTER HOURS CLEARED':'CITY CLAIMED'):'RUN OVER';
+  $('afterbtn').classList.toggle('hidden',!(UNLOCK.afterHours&&!AFTER()));
   $('rank').textContent=rank;
   const prev=loadBest(); const isBest=!prev||score>prev.score; $('newbest').classList.toggle('hidden',!isBest);
   if(isBest){ try{ localStorage.setItem(bestKey,JSON.stringify({score,rank})); }catch(e){} }
   $('endstats').innerHTML=`${D.name}<br>CREW: ${crew}<br>SCORE: ${score.toLocaleString()}<br>TAGS: ${tagsDone}/${TOTAL_TAGS}<br>BEST COMBO: ${bestCombo.toLocaleString()}<br>PEAK FLOW: ${FLOW.names[FLOW.peak]}${secretFound?`<br>SECRET: ${D.secretName}`:''}<br>TIME: ${fmtTime(runTime)}`;
 }
 $('start').onclick=()=>startGame();
+function refreshLevelBtn(){ const b=$('levelbtn'); b.classList.toggle('hidden',!UNLOCK.afterHours); b.textContent='LEVEL: '+(AFTER()?'AFTER HOURS':'STORY'); }
+$('levelbtn').onclick=()=>{ LEVEL=AFTER()?'story':'after'; try{ localStorage.setItem('inkline_level',LEVEL); }catch(e){} refreshLevelBtn(); if(AFTER()&&tod!=='night') applyTOD('night'); blip(880,0.06,'square',0.06); };
+$('afterbtn').onclick=()=>{ LEVEL='after'; try{ localStorage.setItem('inkline_level','after'); localStorage.removeItem('inkline_save'); }catch(e){} location.reload(); };
+refreshLevelBtn(); if(AFTER()&&tod!=='night') applyTOD('night');
 // ====================================================================== SAVE STATE
 // Autosaves every 8s, on every tag, on pause and on district travel. CONTINUE on the title screen picks the run back up.
 const SAVE_KEY='inkline_save';
 function saveRun(district=DKEY){ if(state!=='play'||winTimer>0) return;
   try{ tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0);
-    localStorage.setItem(SAVE_KEY,JSON.stringify({district,bossesBeaten,score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,bestCombo,heat,crew,saved:Date.now()})); }catch(e){} }
+    localStorage.setItem(SAVE_KEY,JSON.stringify({district,eggActive,level:LEVEL,bossesBeaten,score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,bestCombo,heat,crew,saved:Date.now()})); }catch(e){} }
 function loadSave(){ try{ const v=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); return v&&DISTRICTS[v.district]?v:null; }catch(e){ return null; } }
 function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
 { const sv=loadSave(); if(sv){ const b=$('continue'); b.classList.remove('hidden');
@@ -3485,7 +3524,7 @@ function applyCrewTag(d,i,name){
   if(name&&d===DKEY&&policeHost()&&heat<5){ heat++; P.heatGrace=12; const p=[...MP.peers.values()].find(p=>p.name===name); if(p) lastKnown=p.R.pos.clone(); }   // a crewmate's tag heats up the whole crew
   if(d===DKEY&&tagSpots.every(t=>t.done)&&!bossesBeaten.includes(DKEY)) setTimeout(()=>{ if(state==='play') startBoss(); },1800);
   if(name){ popup(`${name} TAGGED${d===DKEY?'':' · '+(DISTRICTS[d]?.name||'')}`); }
-  if(tagsDone>=TOTAL_TAGS&&winTimer<0&&bossesBeaten.length>=Object.keys(DISTRICTS).length){ message('CITY CLAIMED!',3); winTimer=2.5; } saveRun(); }
+  if(tagsDone>=TOTAL_TAGS&&winTimer<0&&bossesBeaten.length>=Object.keys(DISTRICTS).length) cityClaimed(); saveRun(); }
 // ---- TAG MODE: when crewmates are close, press T (or hold VIEW/CREATE) for a 2-minute game of tag. Least time as IT wins.
 const TAGM={active:false,it:null,until:0,players:[],itTime:{},immune:0,lastTag:0};
 function nearbyCrew(r=6){ return crewHere().filter(p=>p.R.pos.distanceTo(P.pos)<r); }
@@ -3513,6 +3552,7 @@ function tagModeTick(dt){ if(!TAGM.active) return;
 function nameTag(name){ const t=canvasTex(256,64,(g,w,h)=>{ g.font='34px Bungee, Impact, sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.lineWidth=7; g.strokeStyle='#1b1724'; g.strokeText(name,w/2,h/2+2); g.fillStyle='#d9e84b'; g.fillText(name,w/2,h/2+2); });
   const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true})); s.scale.set(2.6,0.65,1); s.position.y=2.55; s.renderOrder=10; return s; }
 function buildRig(cid){ return new Promise(res=>{ const c=CHARS.find(c=>c.id===cid);
+  if(cid==='zero'){ res(makeZeroSkater()); return; }
   if(!c||c.id==='classic'||!c.url){ res(makeSkater()); return; }
   new GLTFLoader().load(c.url,gltf=>{ try{ if(c.parts) res(rigFromParts(gltf.scene)); else { const mb=findMixamoBones(gltf.scene); res(mb?rigFromMixamo(gltf.scene,mb,gltf.animations||[]):rigFromGLB(gltf.scene)); } }catch(err){ res(makeSkater()); } },undefined,()=>res(makeSkater())); }); }
 function remoteState(){ return {pos:new V3(),vel:new V3(),facing:0,grounded:true,grind:null,wall:null,qpAir:null,trick:null,stag:0,crouch:0.3,squash:0,slideAmt:0,sliding:false,slideSide:1,swapT:0,feetIn:0,stride:0,stance:1,sideStance:0,
@@ -3639,6 +3679,7 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); } };   // debug: advance the simulation without waiting for frames
+window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
 window.__game={SPIRE,HIDEOUTS,BARRIERS,COPING,MEGA,BILLS,CARS,TRAFFIC,ROADX,ROADN,ROADS,CHAINS,FILL,COURTS,FILLERS,BRIDGES,PROPS,TOTAL_TAGS,P,C,FLOW,GEST,cam,applyTOD,post,DKEY,renderer,scene,world,SK,loadPlayerModel,state:()=>state,tagSpots,rails,solids,gestureInput,loopRail,SET};
 </script>
 </body>
