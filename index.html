@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1b1724">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Just Save Radio">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
 <title>Just Save Radio: Frequency Zero</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Permanent+Marker&display=swap" rel="stylesheet">
@@ -14,6 +22,10 @@
   .hidden { display:none !important; }
   .chip { background:var(--ink); color:#fff; padding:6px 12px; border:3px solid #fff; box-shadow:5px 5px 0 var(--pink); transform:skewX(-10deg); }
   #hud { position:fixed; inset:0; pointer-events:none; }
+  /* everything on screen scales with the viewport (--ui is set from JS): about half size on a landscape phone, 1 on desktop */
+  #hud > *, .screen > *, #mphud, #padtoast, #lockon > * { zoom:var(--ui,1); }
+  .screen { overflow-y:auto; justify-content:safe center; }
+  @media (max-height:520px){ .screen { gap:8px; } #title .row > div[style] { display:grid !important; grid-template-columns:1fr 1fr; gap:8px !important; } }
   #score-box { position:absolute; left:18px; top:16px; }
   #score-box .lbl { font-size:12px; letter-spacing:2px; color:var(--lime); }
   #score { font-size:30px; line-height:1; }
@@ -36,6 +48,12 @@
   @keyframes pop { 0%{opacity:0; transform:translate(-50%,10px) scale(.6);} 15%{opacity:1; transform:translate(-50%,0) scale(1.15);} 100%{opacity:0; transform:translate(-50%,-60px) scale(1);} }
   #msg { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); font-size:42px; text-align:center; color:var(--yellow); text-shadow:4px 4px 0 #111,-2px -2px 0 #111; opacity:0; transition:opacity .25s; }
   #map { position:absolute; right:18px; bottom:18px; width:180px; height:180px; border:3px solid #fff; box-shadow:5px 5px 0 var(--cyan); border-radius:50%; }
+  #rotate { display:none; position:fixed; inset:0; z-index:50; background:#1b1724; color:#fff; flex-direction:column; align-items:center; justify-content:center; gap:18px; font:20px Bungee, Impact, sans-serif; text-align:center; padding:24px; }
+  #rotate .ph { width:64px; height:104px; border:6px solid #d9e84b; border-radius:12px; animation:rot 1.8s ease-in-out infinite; }
+  @keyframes rot { 0%,30% { transform:rotate(0) } 60%,100% { transform:rotate(-90deg) } }
+  @media (orientation:portrait) and (pointer:coarse) { #rotate { display:flex; } }
+  #padtoast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:#1b1724e6; color:#d9e84b; font:15px Bungee, Impact, sans-serif; padding:8px 16px; border-radius:10px; z-index:40; pointer-events:none; opacity:0; transition:opacity .3s; }
+  #padhint { display:none; } @media (pointer:coarse) { #padhint { display:block; } }
   #mphud { position:fixed; top:14px; left:50%; transform:translateX(-50%); font:13px Bungee, Impact, sans-serif; color:#fff; background:#1b1724cc; padding:4px 12px; border-radius:10px; z-index:6; pointer-events:none; letter-spacing:1px; }
   #lockon { position:fixed; left:0; top:0; width:0; height:0; pointer-events:none; z-index:6; }
   #lockon i { position:absolute; left:-46px; top:-46px; width:92px; height:92px; border:4px solid #d9e84b; border-radius:50%; box-shadow:0 0 0 3px #1b1724, inset 0 0 0 3px #1b1724; animation:lockspin 1.4s linear infinite; border-style:dashed; }
@@ -126,7 +144,8 @@
   <div class="sub">FREQUENCY ZERO</div>
   <div class="hidden" id="dname">HARBOR HEIGHTS</div>
   <div class="row"><span>CREW TAG</span><input id="crew" maxlength="8" value="NOVA" spellcheck="false"></div>
-  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="charbtn" class="tool">CHARACTER: CROWN</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button></div></div>
+  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="charbtn" class="tool">CHARACTER: CROWN</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
+  <div class="note" id="padhint">On a phone or tablet: pair your PlayStation or Xbox controller in Bluetooth settings, then press any button on it.</div>
   <button id="continue" class="hidden">CONTINUE</button>
   <button id="start">SKATE!</button>
 
@@ -154,6 +173,8 @@
   <div class="note">Everyone on the same room code skates together. Tags are shared: any wall your crew claims counts for everyone in the room. Friends join by opening this game's address, entering their access code and using the same room code.</div>
 </div>
 <div id="mphud" class="hidden"></div>
+<div id="rotate"><div class="ph"></div>TURN YOUR PHONE SIDEWAYS<small style="font-size:12px;opacity:.7">JUST SAVE RADIO PLAYS IN LANDSCAPE</small></div>
+<div id="padtoast"></div>
 <div id="controlsPanel" class="screen hidden">
   <div class="sub">CONTROLS</div>
   <div class="controls">
@@ -190,6 +211,8 @@
   <div class="sub" id="pauseinfo"></div>
   <button id="presume">RESUME</button>
   <button id="pcontrols" class="tool">CONTROLS</button>
+  <button id="pcam" class="tool">CAMERA: NORMAL</button>
+  <button id="pfs" class="tool">FULLSCREEN</button>
   <button id="pquit" class="tool">QUIT TO TITLE</button>
 </div>
 <div id="quitConfirm" class="screen hidden">
@@ -206,6 +229,8 @@
   <div class="row"><button id="again">RUN IT BACK</button><button id="nextd" class="tool">NEXT DISTRICT →</button></div>
 </div>
 
+<script>(function(){ const f=()=>{ const s=Math.max(0.48,Math.min(1,innerWidth/1180,innerHeight/760)); document.documentElement.style.setProperty('--ui',s.toFixed(3)); };
+  f(); addEventListener('resize',f); addEventListener('orientationchange',()=>setTimeout(f,200)); })();</script>
 <script src="online-config.js"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
 <script type="module">
@@ -2047,7 +2072,7 @@ function startMusic(){
 
 // ====================================================================== INPUT
 const keys=new Set(), pressed=new Set();
-const KEYMAP={KeyW:'f',KeyS:'b',KeyA:'l',KeyD:'r',Space:'jump',ShiftLeft:'boost',ShiftRight:'boost',KeyJ:'fo',KeyK:'fs',KeyL:'ft',KeyE:'spray',KeyV:'aim',KeyQ:'brake',KeyF:'drift',KeyR:'ability',KeyC:'cam',KeyM:'music',KeyP:'pause',ArrowLeft:'cl',ArrowRight:'cr',ArrowUp:'cu',ArrowDown:'cd',Escape:'esc'};
+const KEYMAP={KeyW:'f',KeyS:'b',KeyA:'l',KeyD:'r',Space:'jump',ShiftLeft:'boost',ShiftRight:'boost',KeyJ:'fo',KeyK:'fs',KeyL:'ft',KeyE:'spray',KeyV:'aim',KeyZ:'camdist',KeyQ:'brake',KeyF:'drift',KeyR:'ability',KeyC:'cam',KeyM:'music',KeyP:'pause',ArrowLeft:'cl',ArrowRight:'cr',ArrowUp:'cu',ArrowDown:'cd',Escape:'esc'};
 addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT'||state==='editor') return; const a=KEYMAP[e.code]; if(!a) return; e.preventDefault(); if(!keys.has(a)) pressed.add(a); keys.add(a); });
 addEventListener('keyup',e=>{ const a=KEYMAP[e.code]; if(a) keys.delete(a); });
 addEventListener('blur',()=>keys.clear());
@@ -2095,7 +2120,7 @@ function readPad(){
   if(gp.kind!==pad.kind){ pad.kind=gp.kind; refreshPadHelp(); }
   const dz=v=>Math.abs(v)<0.18?0:v; pad.mx=dz(gp.axes[0]||0); pad.my=dz(gp.axes[1]||0); pad.cx=dz(gp.axes[2]||0); pad.cy=dz(gp.axes[3]||0);
   // face buttons: 0 ✕/A jump (flip in air) · 1 ○/B spin · 2 □/X grab · 3 △/Y kick · LB/L1 aim (double flips in the air) · RB/R1 spray can; L2/LT brake on the ground, Ink Dash in the air
-  const map={0:['jump'],1:['fo'],2:['fs'],3:['ft'],4:['aim','mod'],5:['spray'],7:['boost'],9:['pause'],10:['drift'],11:['cam'],17:['cam'],12:['cu'],13:['cd'],14:['cl'],15:['cr']};
+  const map={8:['camdist'],0:['jump'],1:['fo'],2:['fs'],3:['ft'],4:['aim','mod'],5:['spray'],7:['boost'],9:['pause'],10:['drift'],11:['cam'],17:['cam'],12:['cu'],13:['cd'],14:['cl'],15:['cr']};
   for(const [i,acts] of Object.entries(map)) if(gp.buttons[+i]?.pressed) for(const a of acts){ pad.held.add(a); if(!pad.prev.has(a)) pressed.add(a); }
   if((gp.buttons[6]?.value||0)>0.3){ pad.held.add('brake'); if(!pad.prev.has('brake')) pressed.add('l2'); }
   pad.prev=pad.held;
@@ -2106,12 +2131,13 @@ function rumble(strong,weak,ms){ const gp=pad.raw; if(!rumbleOn||!gp) return; co
   try{ if(va&&va.playEffect) va.playEffect(va.type||'dual-rumble',{duration:ms,strongMagnitude:strong,weakMagnitude:weak}).catch(()=>{}); }catch(e){} }
 function refreshPadHelp(){
   const g=GLYPH[pad.kind]||GLYPH.xbox, el=document.getElementById('padhelp'), ed=document.getElementById('edpadhelp');
-  if(el) el.textContent=`${g.jump} jump · IN AIR: ${g.jump} flip · ${g.trick} spin · ${g.grab} grab · ${g.top} kick · press two together = combo tricks · hold ${g.aim} aim at a marker · hold ${g.spray} spray · ${g.brake} or pull back = powerslide (Ink Dash in air) · ${g.boost} boost · ${g.mod} in air = double flips · ${g.drift} drift · ${g.cam}${pad.kind==='ps'?' / touchpad':''} recenter · ${g.pause} pause · d-pad / R-stick = tag gestures`;
+  if(el) el.textContent=`${g.jump} jump · IN AIR: ${g.jump} flip · ${g.trick} spin · ${g.grab} grab · ${g.top} kick · press two together = combo tricks · hold ${g.aim} aim at a marker · hold ${g.spray} spray · ${g.brake} or pull back = powerslide (Ink Dash in air) · ${g.boost} boost · ${g.mod} in air = double flips · ${g.drift} drift · ${g.cam}${pad.kind==='ps'?' / touchpad':''} recenter · ${g.pause} pause · ${pad.kind==='ps'?'CREATE':'VIEW'} camera distance · d-pad / R-stick = tag gestures`;
   if(ed) ed.textContent=`${pad.kind==='ps'?'Controller':'Gamepad'}: right stick moves the nozzle, ${g.boost} or ${g.jump} paints, ${g.mod}/${g.magnet} brush, ${g.ability} colour, ${g.grab} undo, ${g.pause} save, ${g.trick} cancel.`;
 }
 addEventListener('gamepadconnected',e=>{ const k=padKind(e.gamepad); pad.kind=k; refreshPadHelp();
-  const name=(GLYPH[k]||GLYPH.xbox).name; if(typeof message==='function'&&state==='play') message(name+' CONNECTED',1.6); else popup&&popup(name+' CONNECTED');
+  const name=(GLYPH[k]||GLYPH.xbox).name; if(typeof message==='function'&&state==='play') message(name+' CONNECTED',1.6); else padToast(name+' CONNECTED');
   pad.raw=e.gamepad; rumble(0.4,0.6,180); });
+function padToast(t){ const el=document.getElementById('padtoast'); if(!el) return; el.textContent=t; el.style.opacity=1; clearTimeout(padToast.t); padToast.t=setTimeout(()=>el.style.opacity=0,2200); }
 const held=a=>keys.has(a)||pad.held.has(a);
 
 // ====================================================================== GAME STATE
@@ -2555,6 +2581,7 @@ function update(dt){
   readPad();
   GEST.cd-=dt; GEST.ax*=0.88; GEST.ay*=0.88;
   if(pressed.has('cam')) cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing));
+  if(pressed.has('camdist')) cycleCamDist(true);
   if(pressed.has('music')){ AU.music=!AU.music; popup(AU.music?'MUSIC ON':'MUSIC OFF'); }
   const inp=moveInput();
   // graffiti targeting first, so input routing knows whether we're mid-gesture
@@ -3155,6 +3182,24 @@ function mpTick(dt){ if(!MP.live) return;
 $('mpbtn').onclick=()=>{ $('mpPanel').classList.remove('hidden'); $('title').classList.add('hidden'); MENU.screen=null; menuFocus(); };
 $('mpback').onclick=()=>{ $('mpPanel').classList.add('hidden'); $('title').classList.remove('hidden'); MENU.screen=null; menuFocus(); };
 $('mpgo').onclick=()=>MP.want?mpDisconnect():mpConnect();
+// ---- camera distance (title, pause, View/Create button, Z key) and fullscreen (title, pause)
+const CAMD=[['CLOSE',5],['NORMAL',7.5],['FAR',10.5],['WIDE',14]]; let camIdx=1;
+function setCamDist(i,announce){ camIdx=(i+CAMD.length)%CAMD.length; cam.dist=CAMD[camIdx][1]; try{ localStorage.setItem('inkline_camdist',String(camIdx)); }catch(e){}
+  for(const id of ['cambtn','pcam']) $(id).textContent='CAMERA: '+CAMD[camIdx][0]; if(announce&&state==='play') popup('CAMERA: '+CAMD[camIdx][0]); }
+function cycleCamDist(announce){ setCamDist(camIdx+1,announce); blip(760,0.05,'square',0.05); }
+try{ const raw=localStorage.getItem('inkline_camdist'), v=raw===null?NaN:+raw; if(Number.isInteger(v)&&v>=0&&v<CAMD.length) camIdx=v; }catch(e){} setCamDist(camIdx);
+$('cambtn').onclick=()=>cycleCamDist(); $('pcam').onclick=()=>cycleCamDist();
+const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement;
+async function toggleFullscreen(){ const d=document.documentElement;
+  try{ if(!fsEl()){ await (d.requestFullscreen?d.requestFullscreen({navigationUI:'hide'}):d.webkitRequestFullscreen&&d.webkitRequestFullscreen());
+      try{ await screen.orientation.lock('landscape'); }catch(e){} }                       // phones: hold landscape while fullscreen
+    else await (document.exitFullscreen?document.exitFullscreen():document.webkitExitFullscreen&&document.webkitExitFullscreen()); }
+  catch(e){ padToast(/iPhone|iPad/.test(navigator.userAgent)?'ON IPHONE: SHARE → ADD TO HOME SCREEN FOR FULLSCREEN':'FULLSCREEN ISN\'T AVAILABLE HERE'); } }
+const fsLabel=()=>{ for(const id of ['fsbtn','pfs']) $(id).textContent=fsEl()?'EXIT FULLSCREEN':'FULLSCREEN'; };
+document.addEventListener('fullscreenchange',fsLabel); document.addEventListener('webkitfullscreenchange',fsLabel);
+$('fsbtn').onclick=toggleFullscreen; $('pfs').onclick=toggleFullscreen;
+if(matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) for(const id of ['fsbtn','pfs']) $(id).classList.add('hidden');   // the installed app is already fullscreen
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')) navigator.serviceWorker.register('sw.js').catch(()=>{});
 $('charbtn').onclick=()=>{ const i=CHARS.findIndex(c=>c.id===CHAR); selectCharacter(CHARS[(i+1)%CHARS.length].id); blip(880,0.06,'square',0.06); };
 if(SUPA){ $('mpserverrow').classList.add('hidden'); $('mpcoderow').classList.remove('hidden'); try{ $('mpcode').value=localStorage.getItem('inkline_code')||''; }catch(e){} }
 const hosted=!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);

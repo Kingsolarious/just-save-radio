@@ -1,0 +1,16 @@
+{
+  "name": "Just Save Radio: Frequency Zero",
+  "short_name": "Just Save Radio",
+  "description": "Cel-shaded inline skating, grinding and graffiti across a city you claim tag by tag.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1b1724",
+  "theme_color": "#1b1724",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
