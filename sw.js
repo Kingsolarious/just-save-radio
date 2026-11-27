@@ -1,6 +1,6 @@
 // Service worker: makes the game installable and keeps the app shell cached.
 // Network first (so updates show up right away), falling back to the cache when offline or flaky.
-const CACHE='jsr-v33';
+const CACHE='jsr-v34';
 const SHELL=['./','./index.html','./online-config.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png',
   './characters/crown_skater.glb','./characters/blue_punk_skater_2027.glb'];
 self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())); });
