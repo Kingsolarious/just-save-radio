@@ -2502,7 +2502,7 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
         e.bone.quaternion.copy(e.r0).multiply(_i.clone().slerp(_d,SPF[0])); spineX.forEach((x,k)=>x.bone.quaternion.copy(x.r0).multiply(_i.clone().slerp(_d,SPF[k+1]))); e.bone.updateMatrixWorld(true); continue; }
       if(procW>=0.999) e.bone.quaternion.copy(tq); else { cq.copy(e.bone.quaternion); e.bone.quaternion.copy(cq.slerp(tq,procW)); }
       if(e.bone===bones.Hips){ e.proxy.getWorldPosition(tv); e.bone.position.copy(e.bone.parent.worldToLocal(tv));
-        if(!P.trick&&P.knock<=0){ const hinge=upper.rotation.x*0.55; root.getWorldQuaternion(_w); _a.set(1,0,0).applyQuaternion(_w);   /* skaters bend at the hips, not just the chest: the legs and spine targets are world-space, so they stay put */
+        if(!P.trick&&P.knock<=0){ const hinge=Math.max(0,upper.rotation.x)*0.55; root.getWorldQuaternion(_w); _a.set(1,0,0).applyQuaternion(_w);   /* skaters bend at the hips, not just the chest: the legs and spine targets are world-space, so they stay put */
           e.bone.updateMatrixWorld(true); e.bone.getWorldQuaternion(_pw); _d.setFromAxisAngle(_a,hinge).multiply(_pw); e.bone.parent.getWorldQuaternion(_pw); e.bone.quaternion.copy(_pw.invert().multiply(_d)); } }
       e.bone.updateMatrixWorld(true);
     }
@@ -2514,7 +2514,7 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
   }
   const onEvent=ev=>{ if(ev==='tag'&&slots.celebrate) celebrateT=1.1; };
   return {root,body,upper,torso:upper,head,L:{hip:hipL,knee:kneeL,ankle:ankleL},R:{hip:hipR,knee:kneeR,ankle:ankleR},aL,aR,
-    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.22,grindCrouch:0.75,leanK:1.75,kneeOutK:0.9,crouchK:0.5,
+    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.22,grindCrouch:0.42,leanK:1.75,kneeOutK:0.9,crouchK:0.5,
     retarget, addClip, onEvent, clipSlots:slots};
 }
 // Player model loading: characters/player.glb (Mixamo-rigged or named-joint) if present, otherwise crown_skater.glb.
@@ -3668,7 +3668,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   r.aL.rotation.z=lerp(r.aL.rotation.z,-armsOut*1.3-0.1,dt*10); r.aR.rotation.z=lerp(r.aR.rotation.z,armsOut*1.3+0.1,dt*10);
   if(P.inJump&&P.grounded&&!P.grind&&r.crouchK){ r.aL.rotation.x=r.aR.rotation.x=0.85; }   // wind-up: arms swing back as the knees load
   if(GEST.active){ r.aR.rotation.x=-1.4; r.aR.rotation.z=0.3; }
-  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?0.22*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
+  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=(P.grind&&r.crouchK)?-0.45-Math.min(0.12,hs*0.006):(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* grinds: sit back over the heels, chest up */   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?0.22*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
   let by=r.upper?0:leanY, bx=r.upper?0:leanX;
   if(P.trick){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2), sg=P.trick.sgn, PI2=Math.PI*2;
     switch(P.trick.kind){
