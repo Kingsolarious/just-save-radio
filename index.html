@@ -2514,7 +2514,7 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
   }
   const onEvent=ev=>{ if(ev==='tag'&&slots.celebrate) celebrateT=1.1; };
   return {root,body,upper,torso:upper,head,L:{hip:hipL,knee:kneeL,ankle:ankleL},R:{hip:hipR,knee:kneeR,ankle:ankleR},aL,aR,
-    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.22,grindCrouch:0.42,leanK:1.75,kneeOutK:0.9,crouchK:0.5,
+    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.22,grindCrouch:0.85,leanK:1.75,kneeOutK:0.9,crouchK:0.5,
     retarget, addClip, onEvent, clipSlots:slots};
 }
 // Player model loading: characters/player.glb (Mixamo-rigged or named-joint) if present, otherwise crown_skater.glb.
