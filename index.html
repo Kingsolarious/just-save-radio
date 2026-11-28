@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=55;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=56;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3653,7 +3653,7 @@ const BA={
     regular:  { hp:[0,0.7,-0.1],   fL:[-0.24,0.02,0], fR:[0.24,0.02,0], kO:[8,8],  up:[16,0,0],  aL:[-40,0,-40], aR:[26,0,52],  eL:[-30], eR:[-18]},
     backside: { hp:[0,0.78,0.04],  fL:[-0.23,0,0], fR:[0.23,0,0], kO:[6,6],  up:[-10,0,-4], aL:[-10,0,-50], aR:[44,0,62],  eL:[-24], eR:[-20]},
     frontside:{ hp:[0,0.62,-0.19], fL:[-0.22,0.04,0], fR:[0.22,0.04,0], kO:[10,10], up:[36,0,0], aL:[-50,0,-30], aR:[-6,0,46], eL:[-34], eR:[-24]},
-    fifty:    { hp:[0,0.72,-0.06], fL:[-0.03,0.2,0], fR:[0.03,-0.2,0], kO:[14,14], up:[16,0,0], aL:[-34,0,-40], aR:[18,0,50], eL:[-30], eR:[-18]},
+    fifty:    { hp:[0,0.67,-0.12], fL:[-0.02,0.12,0], fR:[0.02,-0.11,0], kO:[24,22], up:[24,10,0], aL:[-16,0,-58], aR:[14,0,56], eL:[-22], eR:[-16]},
     blunt:    { hp:[0.03,0.68,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
   // tricks (airborne): feet relative to the body
   trick:{
