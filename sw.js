@@ -1,8 +1,8 @@
 // Service worker: makes the game installable and keeps the app shell cached.
 // Network first (so updates show up right away), falling back to the cache when offline or flaky.
-const CACHE='jsr-v61';
+const CACHE='jsr-v62';
 const SHELL=['./','./index.html','./online-config.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png',
-  './characters/rollerblader.glb'];
+  './characters/rollerblader.glb','./characters/boho.glb'];
 self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())); });
 self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())); });
 self.addEventListener('fetch',e=>{

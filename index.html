@@ -179,7 +179,7 @@
   <div id="buildtag" style="font:11px Bungee, Impact, sans-serif;opacity:0.55;letter-spacing:1px">BUILD</div>
   <div class="hidden" id="dname">HARBOR HEIGHTS</div>
   <div class="row"><span>CREW TAG</span><input id="crew" maxlength="8" value="NOVA" spellcheck="false"></div>
-  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="levelbtn" class="tool hidden">LEVEL: STORY</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
+  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="levelbtn" class="tool hidden">LEVEL: STORY</button><button id="charbtn" class="tool">CHARACTER: BLADER</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
   <div class="note" id="padhint">On a phone or tablet: pair your PlayStation or Xbox controller in Bluetooth settings, then press any button on it.</div>
   <button id="continue" class="hidden">CONTINUE</button>
   <button id="start">SKATE!</button>
@@ -2558,9 +2558,9 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=61;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=62;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
-const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
+const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD}, {id:'boho',label:'BOHO',url:'characters/boho.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
@@ -3663,14 +3663,14 @@ const BA={
     blunt:    { hp:[0.03,0.73,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
   // tricks (airborne): feet relative to the body
   trick:{
-    tuck:    { hp:[0,0.8,0.02],  fL:[-0.1,0.2,0.62], fR:[0.1,0.2,0.62], kO:[6,6], up:[52,0,0], hd:[10,0,0], aL:[-42,0,-14], aR:[-42,0,14], eL:[-64], eR:[-64]},   // knees to the chest, back rounded, arms wrapped round the shins
-    spin:    { hp:[0,0.84,0], fL:[-0.12,0.04,0.2], fR:[0.12,0.04,0.2], kO:[8,8], up:[10,0,0], aL:[-24,0,-30], aR:[-24,0,30], eL:[-104], eR:[-104]},
-    grab:    { hp:[0,0.8,0],  fL:[-0.14,0.16,0.38], fR:[0.12,0.08,0.32], kO:[14,10], up:[32,0,0], hd:[-20,0,0], aL:[-70,0,-6], aR:[-24,0,64], eL:[-16], eR:[-40]},
+    tuck:    { hp:[0,0.8,0.02],  fL:[-0.11,0.2,0.62], fR:[0.11,0.2,0.62], kO:[0,0], up:[52,0,0], hd:[10,0,0], aL:[-42,0,-14], aR:[-42,0,14], eL:[-64], eR:[-64]},   // knees to the chest, back rounded, arms wrapped round the shins
+    spin:    { hp:[0,0.84,0], fL:[-0.12,0.04,0.2], fR:[0.12,0.04,0.2], kO:[0,0], up:[10,0,0], aL:[-24,0,-30], aR:[-24,0,30], eL:[-104], eR:[-104]},
+    grab:    { hp:[0,0.8,0],  fL:[-0.13,0.16,0.38], fR:[0.12,0.08,0.32], kO:[2,2], up:[32,0,0], hd:[-20,0,0], aL:[-70,0,-6], aR:[-24,0,64], eL:[-16], eR:[-40]},
     kick:    { hp:[0,0.82,0], fL:[-0.1,0.62,0.4], fR:[0.12,-0.04,0.24], kO:[0,12], up:[6,0,0], aL:[-10,0,-82], aR:[-10,0,82], eL:[-14], eR:[-14]},
     split:   { hp:[0,0.82,0], fL:[-0.74,0,0.3], fR:[0.74,0,0.3], kO:[0,0], up:[18,0,0], aL:[-10,0,-62], aR:[-10,0,62], eL:[-10], eR:[-10]},
     rocket:  { hp:[0,0.82,0], fL:[-0.1,0.72,0.34], fR:[0.1,0.72,0.34], kO:[0,0], up:[-8,0,0], aL:[-82,0,-10], aR:[-82,0,10], eL:[-8], eR:[-8]},
     superman:{ hp:[0,0.82,0], fL:[-0.12,-0.84,0.22], fR:[0.12,-0.84,0.22], kO:[0,0], up:[0,0,0], hd:[-30,0,0], aL:[-172,0,-10], aR:[-172,0,10], eL:[0], eR:[0]},
-    heli:    { hp:[0,0.82,0], fL:[-0.12,0.1,0.36], fR:[0.12,0.1,0.36], kO:[10,10], up:[14,0,0], aL:[-162,0,-18], aR:[-22,0,62], eL:[-10], eR:[-62]} },
+    heli:    { hp:[0,0.82,0], fL:[-0.12,0.1,0.36], fR:[0.12,0.1,0.36], kO:[0,0], up:[14,0,0], aL:[-162,0,-18], aR:[-22,0,62], eL:[-10], eR:[-62]} },
   spray:{ aR:[-86,0,10], eR:[-8], aL:[-12,0,-26], eL:[-52]} };
 const TRICK_POSE={flip:'tuck',flip2:'tuck',bflip:'tuck',bflip2:'tuck',cork:'tuck',twist:'tuck',side:'tuck',side2:'tuck',spin:'spin',spin2:'spin',grab:'grab',grab2:'grab',kick:'kick',kickspin:'kick',split:'split',rocket:'rocket',superman:'superman',heli:'heli'};
 const AJ=['hp','fL','fR','kO','up','hd','aL','aR','eL','eR'];
@@ -4346,7 +4346,7 @@ function buildRig(cid){ return new Promise(res=>{ const c=CHARS.find(c=>c.id===c
   new GLTFLoader().load(c.url,gltf=>{ try{ if(c.parts) res(rigFromParts(gltf.scene)); else { const mb=findMixamoBones(gltf.scene); res(mb?rigFromMixamo(gltf.scene,mb,gltf.animations||[]):rigFromGLB(gltf.scene)); } }catch(err){ res(makeSkater()); } },undefined,()=>res(makeSkater())); }); }
 function remoteState(){ return {pos:new V3(),vel:new V3(),facing:0,grounded:true,grind:null,wall:null,qpAir:null,trick:null,stag:0,crouch:0.3,squash:0,slideAmt:0,sliding:false,slideSide:1,swapT:0,feetIn:0,stride:0,stance:1,sideStance:0,
   tiltV:new V3(0,1,0),snapOff:null,railLift:0,knock:0,kneeOut:0,gs:null,turn:0,invuln:0,inJump:false,inDrift:false,inBoost:false}; }
-function dressPeer(p){ const cid='blader'; if(p.char===cid) return; p.char=cid; const tok=p.dressTok=(p.dressTok||0)+1;
+function dressPeer(p){ const cid=CHARS.some(c=>c.id===(p.st&&p.st.c))?p.st.c:'blader'; if(p.char===cid) return; p.char=cid; const tok=p.dressTok=(p.dressTok||0)+1;
   buildRig(cid).then(rig=>{ if(p.dressTok!==tok||MP.peers.get(p.id)!==p){ return; } if(p.rig) scene.remove(p.rig.root); p.rig=rig; scene.add(rig.root); rig.root.visible=p.g.visible; }); }
 function addPeer(id,name,st){ if(id===MP.id||MP.peers.has(id)) return; const g=new THREE.Group(); g.userData.dyn=true; g.visible=false; const tag=nameTag(name); g.add(tag); scene.add(g);
   const p={id,name,st,g,tag,rig:null,char:null,R:remoteState()}; if(st&&st.p) p.R.pos.set(...st.p); MP.peers.set(id,p); dressPeer(p); refreshMpUI(); }
