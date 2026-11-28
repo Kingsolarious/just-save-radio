@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=57;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=58;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3657,7 +3657,7 @@ const BA={
     blunt:    { hp:[0.03,0.73,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
   // tricks (airborne): feet relative to the body
   trick:{
-    tuck:    { hp:[0,0.8,0],  fL:[-0.12,0.12,0.42], fR:[0.12,0.12,0.42], kO:[10,10], up:[28,0,0], hd:[-20,0,0], aL:[-52,0,-20], aR:[-52,0,20], eL:[-92], eR:[-92]},
+    tuck:    { hp:[0,0.8,0.02],  fL:[-0.1,0.2,0.62], fR:[0.1,0.2,0.62], kO:[6,6], up:[52,0,0], hd:[10,0,0], aL:[-78,0,-8], aR:[-78,0,8], eL:[-112], eR:[-112]},   // knees to the chest, back rounded, arms wrapped round the shins
     spin:    { hp:[0,0.84,0], fL:[-0.12,0.04,0.2], fR:[0.12,0.04,0.2], kO:[8,8], up:[10,0,0], aL:[-24,0,-30], aR:[-24,0,30], eL:[-104], eR:[-104]},
     grab:    { hp:[0,0.8,0],  fL:[-0.14,0.16,0.38], fR:[0.12,0.08,0.32], kO:[14,10], up:[32,0,0], hd:[-20,0,0], aL:[-70,0,-6], aR:[-24,0,64], eL:[-16], eR:[-40]},
     kick:    { hp:[0,0.82,0], fL:[-0.1,0.62,0.4], fR:[0.12,-0.04,0.24], kO:[0,12], up:[6,0,0], aL:[-10,0,-82], aR:[-10,0,82], eL:[-14], eR:[-14]},
@@ -3683,6 +3683,24 @@ function solveLeg(leg,L1,L2,target,pole,side){
   _aq.setFromUnitVectors(_DN,_at); _ax0.copy(_X).applyQuaternion(_aq);                  // twist so the hinge lines up
   const tw=Math.atan2(_at.dot(_aw.crossVectors(_ax0,_an)),_ax0.dot(_an)); _aq2.setFromAxisAngle(_at,tw); leg.hip.quaternion.copy(_aq2.multiply(_aq));
   leg.knee.rotation.set(Math.PI-kneeIn,0,0); return D; }
+/* Skating stride foot orbit (leg-lengths). Each skate pushes out to the side-and-back on the ground (a gentle arc),
+   then lifts and swings round in a loop back under the hips to set down again: an oval orbit, one foot half a cycle
+   behind the other. The hips ride over the gliding skate and dip slightly at the end of each push. */
+function strideFeet(ph,hs){
+  const reach=0.8+0.3*clamp((hs-4)/12,0,1), CONTACT=0.56, out={};
+  let sup=0, supW=0;
+  for(const [key,sd,off] of [['fL',-1,0.56],['fR',1,0.06]]){
+    const f=(((ph+off)%1)+1)%1, set=[sd*0.06,0.1], ext=[sd*0.42*reach,-0.22*reach];
+    const cx=(set[0]+ext[0])/2, cz=(set[1]+ext[1])/2, dx=ext[0]-set[0], dz=ext[1]-set[1], a=Math.hypot(dx,dz)/2, ux=dx/(2*a), uz=dz/(2*a);
+    let nx=-uz*sd, nz=ux*sd; if(nz<0){ nx=-nx; nz=-nz; }                  // across the push line, pointing forward
+    let th, bow, lift=0;
+    if(f<CONTACT){ const t=smooth01(f/CONTACT); th=Math.PI*(1-t); bow=-0.035; }                     // gliding push: out and back, a shallow arc
+    else { const t=(f-CONTACT)/(1-CONTACT); th=-Math.PI*t; bow=0.13; lift=0.11*Math.sin(Math.PI*t)*reach; }   // recovery: up and round, back under the hips
+    const x=cx+a*Math.cos(th)*ux+bow*Math.sin(Math.abs(th))*nx, z=cz+a*Math.cos(th)*uz+bow*Math.sin(Math.abs(th))*nz;
+    out[key]=[x,z,lift]; if(f<CONTACT){ const w=Math.sin(Math.PI*f/CONTACT)+0.2; sup+=x*w; supW+=w; } }
+  const ext2=Math.cos((ph+0.06)*Math.PI*4);                               // dip at the end of each push
+  out.hp=[clamp(sup/Math.max(supW,1e-3),-0.12,0.12)*0.55, 0.72-0.018*(ext2*0.5+0.5), -0.09];
+  return out; }
 function animateBlader(dt,r,P,hs){
   const S=r._anim??={cur:null,wasG:true,landT:0};
   if(P.grounded&&!S.wasG&&!P.grind) S.landT=0.3; S.wasG=P.grounded||!!P.grind; S.landT=Math.max(0,S.landT-dt);
@@ -3695,11 +3713,12 @@ function animateBlader(dt,r,P,hs){
       aL:[tgt.aL[0]+sw*7,0,tgt.aL[2]+sw*4],aR:[tgt.aR[0]-sw*7,0,tgt.aR[2]+sw*4],hd:[-8,-gy*0.55+Math.sin(clock*0.8)*6,0]}; }
   else if(P.wall){ tgt=P.wall.up?BA.wallrun:BA.wall; onGround=false; }
   else if(!P.grounded){ tgt=P.vel.y>-3?BA.air:mixPose(BA.air,BA.fall,clamp((-P.vel.y-3)/6,0,1));
-    if(P.trick){ const tp=BA.trick[TRICK_POSE[P.trick.kind]||'tuck'], k=clamp(P.trick.t/P.trick.dur,0,1), env=Math.min(1,Math.sin(k*Math.PI)*1.6); tgt=mixPose(tgt,P.stance<0?mirrorPose(tp):tp,env); rate=22; } }
+    if(P.trick){ const tk=TRICK_POSE[P.trick.kind]||'tuck', tp=BA.trick[tk], k=clamp(P.trick.t/P.trick.dur,0,1), env=Math.min(1,Math.sin(k*Math.PI)*(tk==='tuck'?2.6:1.6)); tgt=mixPose(tgt,P.stance<0?mirrorPose(tp):tp,env); rate=tk==='tuck'?30:22; } }
   else if(P.inJump){ tgt=BA.load; rate=20; }
   else if(S.landT>0){ tgt=BA.land; rate=24; }
   else if(P.sliding){ tgt=side(BA.slide); }
-  else if(hs>1.5){ const st=samplePose(BA.stride,(P.stride||0)/(Math.PI*2)); tgt=hs>17?mixPose(st,BA.fast,clamp((hs-17)/8,0,0.8)):st; rate=16; }
+  else if(hs>1.5){ const ph=(P.stride||0)/(Math.PI*2), st=samplePose(BA.stride,ph), orb=strideFeet(ph,hs); st.fL=orb.fL; st.fR=orb.fR; st.hp=orb.hp;   // upper body from the keys, legs on the orbit
+    tgt=hs>17?mixPose(st,BA.fast,clamp((hs-17)/8,0,0.8)):st; rate=24; }
   else { tgt=samplePose(BA.idle,clock/3.2); rate=6; }
   if(GEST.active&&!P.grind) tgt={...tgt,...BA.spray};
   const k=1-Math.exp(-dt*rate); if(!S.cur){ S.cur={}; for(const j of AJ) S.cur[j]=(tgt[j]||ZP[j]).slice(); }
