@@ -2446,7 +2446,12 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
   const spineX=['Spine1','Spine2'].map(n=>bones[n]).filter(Boolean).map(b=>({bone:b,r0:b.quaternion.clone()}));
   const SPF=spineX.length===2?[0.4,0.32,0.28]:spineX.length===1?[0.55,0.45]:[1];
   const elbows=['LeftForeArm','RightForeArm'].map(n=>({fa:bones[n],hand:bones[n.replace('ForeArm','Hand')]})).filter(e=>e.fa&&e.hand);
-  const _d=new THREE.Quaternion(), _i=new THREE.Quaternion(), _w=new THREE.Quaternion(), _pw=new THREE.Quaternion(), _a=new V3(), _f=new V3(), _h=new V3(), _e=new V3();
+  /* secondary rig (from the converter): wheels that roll by distance travelled, springy hair + wallet chain */
+  const rigK=model.scale.x, wheels=[], springs=[];
+  src.traverse(o=>{ if(!o.isBone) return; const u=o.userData||{}; const qw=o.getWorldQuaternion(new THREE.Quaternion());
+    if(u.wheel&&u.axis) wheels.push({b:o,q0:o.quaternion.clone(),axis:new V3(...u.axis).applyQuaternion(qw.clone().invert()).normalize(),r:(u.radius||0.04)*rigK,a:0});
+    if(u.spring&&u.tip){ const t=new V3(...u.tip); springs.push({b:o,q0:o.quaternion.clone(),dir:t.clone().normalize(),len:t.length()*rigK,k:u.stiff||80,d:u.damp||8,max:u.max||0.5,S:null,V:new V3()}); } });
+  const _bx=new V3(1,0,0), _wq=new THREE.Quaternion(), _sv=new V3(), _sb=new V3(), _st=new V3(), _d=new THREE.Quaternion(), _i=new THREE.Quaternion(), _w=new THREE.Quaternion(), _pw=new THREE.Quaternion(), _a=new V3(), _f=new V3(), _h=new V3(), _e=new V3();
   const L1=BP.LeftUpLeg.distanceTo(BP.LeftLeg), L2s=BP.LeftLeg.distanceTo(BP.LeftFoot), ANK=BP.LeftFoot.y;
   // ---- animation clips: slots picked by game state, crossfaded, then blended per body region with the procedural pose
   const mixer=new THREE.AnimationMixer(src), slots={}, weights={};
@@ -2499,7 +2504,9 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
       e.bone.parent.getWorldQuaternion(pq); tq.premultiply(pq.invert());              // procedural local rotation
       const procW=slot?1-clipW*share[e.region]:1;
       if(e.name==='Spine'&&spineX.length&&procW>=0.999){ _d.copy(e.r0).invert().multiply(tq); _i.identity();
-        e.bone.quaternion.copy(e.r0).multiply(_i.clone().slerp(_d,SPF[0])); spineX.forEach((x,k)=>x.bone.quaternion.copy(x.r0).multiply(_i.clone().slerp(_d,SPF[k+1]))); e.bone.updateMatrixWorld(true); continue; }
+        e.bone.quaternion.copy(e.r0).multiply(_i.clone().slerp(_d,SPF[0])); spineX.forEach((x,k)=>x.bone.quaternion.copy(x.r0).multiply(_i.clone().slerp(_d,SPF[k+1])));
+        if(spineX.length&&P.grounded&&!P.grind&&Math.hypot(P.vel.x,P.vel.z)<1.5) spineX[spineX.length-1].bone.quaternion.multiply(_i.setFromAxisAngle(_bx,Math.sin(clock*1.7)*0.03));   /* idle: a slow breath through the chest */
+        e.bone.updateMatrixWorld(true); continue; }
       if(procW>=0.999) e.bone.quaternion.copy(tq); else { cq.copy(e.bone.quaternion); e.bone.quaternion.copy(cq.slerp(tq,procW)); }
       if(e.bone===bones.Hips){ e.proxy.getWorldPosition(tv); e.bone.position.copy(e.bone.parent.worldToLocal(tv));
         if(!P.trick&&P.knock<=0){ const ux=upper.rotation.x, hinge=(ux>=0&&!P.grind)?ux*0.55:ux*0.95;   /* rails: the whole straight back tips as one, no arch */   /* forward: bend at the hips; back (grinds): the whole straight back tips, no arch */ root.getWorldQuaternion(_w); _a.set(1,0,0).applyQuaternion(_w);   /* skaters bend at the hips, not just the chest: the legs and spine targets are world-space, so they stay put */
@@ -2511,6 +2518,14 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
       root.getWorldQuaternion(_w); _f.set(0,0,1).applyQuaternion(_w);
       for(const el of elbows){ el.fa.getWorldPosition(_e); el.hand.getWorldPosition(_h); _h.sub(_e).normalize(); _a.crossVectors(_h,_f); if(_a.lengthSq()<1e-4) continue; _a.normalize();
         el.fa.getWorldQuaternion(_pw); _d.setFromAxisAngle(_a,flex).multiply(_pw); el.fa.parent.getWorldQuaternion(_pw); el.fa.quaternion.copy(_pw.invert().multiply(_d)); el.fa.updateMatrixWorld(true); } }
+    if(wheels.length){ root.getWorldQuaternion(_w); _f.set(0,0,1).applyQuaternion(_w); const roll=(P.grounded||P.wall)&&!P.grind?(P.vel.x*_f.x+P.vel.z*_f.z):0;   /* wheels roll by distance; on a rail they're locked */
+      for(const w of wheels){ w.spin=lerp(w.spin||0,roll/w.r,Math.min(1,dt*(roll?20:1.5))); w.a+=w.spin*dt; w.b.quaternion.copy(w.q0).multiply(_i.setFromAxisAngle(w.axis,w.a)); w.b.updateMatrixWorld(true); } }
+    for(const sp of springs){ const b=sp.b; b.quaternion.copy(sp.q0); b.updateMatrixWorld(true); b.getWorldPosition(_sb); b.getWorldQuaternion(_wq); _st.copy(sp.dir).applyQuaternion(_wq).multiplyScalar(sp.len).add(_sb);   /* spring bones: the tip lags behind the motion and swings back */
+      if(!sp.S||sp.S.distanceTo(_st)>1){ sp.S=_st.clone(); sp.V.set(0,0,0); }
+      const h=Math.min(dt,1/30); _sv.copy(_st).sub(sp.S).multiplyScalar(sp.k).addScaledVector(sp.V,-sp.d); _sv.y-=2; sp.V.addScaledVector(_sv,h); sp.S.addScaledVector(sp.V,h);
+      _sv.copy(sp.S).sub(_sb).normalize(); sp.S.copy(_sb).addScaledVector(_sv,sp.len); _a.copy(sp.dir).applyQuaternion(_wq).normalize();
+      _d.setFromUnitVectors(_a,_sv); const ang=2*Math.acos(clamp(_d.w,-1,1)); if(ang>sp.max) _d.slerp(_i.identity(),1-sp.max/ang);
+      _d.multiply(_wq); b.parent.getWorldQuaternion(_pw); b.quaternion.copy(_pw.invert().multiply(_d)); b.updateMatrixWorld(true); }
   }
   const onEvent=ev=>{ if(ev==='tag'&&slots.celebrate) celebrateT=1.1; };
   return {root,body,upper,torso:upper,head,L:{hip:hipL,knee:kneeL,ankle:ankleL},R:{hip:hipR,knee:kneeR,ankle:ankleR},aL,aR,
@@ -3219,6 +3234,14 @@ function land(g){
   sfx.land(); for(let i=0;i<8;i++) emit(P.pos.clone().add(new V3(0,0.1,0)),rv(4).setY(1.5),0xe8e1c7,0.4,0.18,4);
 }
 function finishTrick(){ const t=P.trick; P.trick=null; trick(t.name,t.pts); }
+/* grind styles: lean (+ forward), torso twist, crouch scale, arms out, arm swing fwd/back (L,R), skate stagger, knee V */
+const GRIND_STYLES={
+  regular:  {name:'Grind',          lean:0.2,  twist:0.15, crouch:1,    arms:1.0, ax:[-0.2,0.3],  stag:0.02, knee:1.15},
+  backside: {name:'Backside Grind', lean:-0.25,twist:-0.2, crouch:0.9,  arms:1.3, ax:[0.35,0.45], stag:0.06, knee:1.15},
+  frontside:{name:'Frontside Grind',lean:0.55, twist:0.1,  crouch:1,    arms:0.8, ax:[-0.6,-0.3], stag:0.02, knee:1.0},
+  fifty:    {name:'50-50',          lean:0.12, twist:0,    crouch:0.85, arms:1.0, ax:[-0.3,-0.3], stag:0.2,  knee:0.55},
+  blunt:    {name:'Bluntside',      lean:0.25, twist:0.7,  crouch:0.95, arms:1.1, ax:[0.2,-0.5],  stag:0.14, knee:0.8} };
+const GRIND_KEYS=Object.keys(GRIND_STYLES);
 function startGrind(r,s){
   rumble(0.15,0.45,140); { const q=railPt(r,s,new V3()); (P.snapOff??=new V3()).add(P.pos.clone().sub(q)).clampLength(0,2.5); }   // ease the body onto the rail instead of teleporting
   const T=railTan(r,s,tmp); const dir=(P.vel.x*T.x+P.vel.z*T.z)>=0?1:-1;
@@ -3229,8 +3252,8 @@ function startGrind(r,s){
   else if(clock-P.lastGrindEnd<0.9&&r!==P.lastRail) { trick('Rail Transfer',150); P.boost=Math.min(100,P.boost+10); }
   if(P.flipRail===r&&clock-P.lastGrindEnd<1.8) { trick('Rail Flip Catch',200); P.boost=Math.min(100,P.boost+10); flowAdd(6); }
   P.flipRail=null;
-  const sw=P.stance<0;
-  trick((sw?'Switch ':'')+(r===loopRail?D.railName:'Grind'),(r===loopRail?120:60)+(sw?40:0)); sfx.grind();
+  const sw=P.stance<0; P.grindStyle=GRIND_KEYS[(GRIND_KEYS.indexOf(P.grindStyle)+1+Math.floor(Math.random()*(GRIND_KEYS.length-1)))%GRIND_KEYS.length]; P.grindLand=0.28;   // a new style each rail, a knee absorb on landing
+  trick((sw?'Switch ':'')+(r===loopRail?D.railName:GRIND_STYLES[P.grindStyle].name),(r===loopRail?120:60)+(sw?40:0)); sfx.grind();
 }
 function endGrind(){ P.bgT=0; P.boost=Math.min(100,P.boost+Math.min(12,(P.grindT||0)*5)); P.grindT=0; P.lastRail=P.grind.r; P.noSame=0.35; P.grind=null; P.grounded=false; P.airTime=0; P.lastGrindEnd=clock; }
 function trySnapRail(){
@@ -3275,7 +3298,7 @@ function grindStep(h,jump,trk,boosting,inp){
   if(Math.random()<0.7) emit(P.pos.clone(),rv(3).addScaledVector(T,-g.dir*3).setY(2+Math.random()*2),Math.random()<0.5?0xffe23a:0xff9548,0.35,0.09,14);
   if(jump){ P.vel.y=CFG.JUMP; endGrind(); P.noGrind=0.15; P.squash=0.2; P.jumpT=clock; P.flipRail=r; switchFeet(); sfx.jump();
     if(inp.m>0.3&&!P.trick) startFlip(inp,true); }   // jump off a rail while holding a direction = that flip (front/back/side)
-  else if(trk&&P.grindCd<=0){ trick(['Rail Switch','Soul Slide','Torque Grind','Fishbrain'][Math.floor(Math.random()*4)],90); P.grindCd=0.45; switchFeet(); sfx.trick(); }
+  else if(trk&&P.grindCd<=0){ P.grindStyle=GRIND_KEYS[(GRIND_KEYS.indexOf(P.grindStyle)+1)%GRIND_KEYS.length]; trick(GRIND_STYLES[P.grindStyle].name+' Switch',90); P.grindCd=0.45; P.grindLand=0.18; switchFeet(); sfx.trick(); }
 }
 // WallRideSystem: forgiving catch when airborne alongside a tall wall
 function trySnapWall(fromGround=false){
@@ -3584,7 +3607,7 @@ function update(dt){
 }
 
 // ====================================================================== VISUALS / CAMERA
-const _q=new THREE.Quaternion(), _qa=new THREE.Quaternion(), _ax=new V3(), _UP=new V3(0,1,0), _nv=new V3(), _qt=new THREE.Quaternion(), _qy=new THREE.Quaternion();
+const _ZA=new V3(0,0,1), _gt=new V3(), _q=new THREE.Quaternion(), _qa=new THREE.Quaternion(), _ax=new V3(), _UP=new V3(0,1,0), _nv=new V3(), _qt=new THREE.Quaternion(), _qy=new THREE.Quaternion();
 function updateSkater(dt){ P.inJump=held('jump'); P.inDrift=held('drift'); P.inBoost=held('boost'); updateSkaterFor(dt,SK,P,true); }
 // the full animator, for any rig + movement state (remote crew run through it too)
 function updateSkaterFor(dt,SK,P,isLocal){
@@ -3607,7 +3630,8 @@ function updateSkaterFor(dt,SK,P,isLocal){
   P.squash=lerp(P.squash,0,Math.min(1,dt*9)); r.root.scale.set(1-P.squash*0.45,1+P.squash,1-P.squash*0.45);
   // crouch 0..1 drives hip height; 2-bone IK below keeps the skates planted under the hips
   let crouch=r.idleCrouch!==undefined?r.idleCrouch+Math.min(0.3,hs*0.018):(0.34+Math.min(0.18,hs*0.012))*(r.upright||1), lean=0, armsOut=0, side=0;          // skaters ride with bent knees, lower at speed
-  if(P.grind){ crouch=(r.grindCrouch||0.82); armsOut=1; side=0; }                // grind crouch (per character)
+  const GS=P.grind&&r.crouchK?GRIND_STYLES[P.grindStyle]||GRIND_STYLES.regular:null; P.grindLand=Math.max(0,(P.grindLand||0)-dt);
+  if(P.grind){ crouch=(r.grindCrouch||0.82)*(GS?GS.crouch:1)+(GS?P.grindLand*0.6:0); armsOut=GS?GS.arms:1; side=0; }                // grind crouch (per character)
   else if(P.wall){ crouch=0.6; armsOut=0.6; const lx=Math.cos(P.facing), lz=-Math.sin(P.facing); lean=-0.85*(Math.sign(P.wall.n.x*lx+P.wall.n.z*lz)||1); }
   else if(!P.grounded){ crouch=r.crouchK?0.72:0.55; }
   else if(P.inJump) crouch=r.crouchK?0.95:0.8;                            // load up before the jump: a deep squat
@@ -3630,10 +3654,10 @@ function updateSkaterFor(dt,SK,P,isLocal){
   if(footIK){
     // Foot targets in the hip frame (metres): lateral, drop to the ankle, forward. On a rail both ankles sit on the
     // rail line - one ahead, one behind - at the same height, so all wheels touch the rail. Ankles keep the skates level.
-    const stTarget=(P.grind?(r.crouchK?0.02:0.24):!P.grounded?0.17:0.04)*P.stance;
+    const stTarget=(P.grind?(GS?GS.stag:0.24):!P.grounded?0.17:0.04)*P.stance;
     P.stag=lerp(P.stag,stTarget,Math.min(1,dt*(P.swapT>0?16:10)));
     const drop=H-r.ANK, onFoot=P.grounded||P.grind, flat=onFoot?1:0.5;
-    P.kneeOut=lerp(P.kneeOut||0,(P.grind?(r.crouchK?1.15:0.6):!P.grounded?0.28:0.14)*(r.kneeOutK||1),Math.min(1,dt*12));   // rails: knees wide, skates together -> a V   // V stance: knees out, feet together
+    P.kneeOut=lerp(P.kneeOut||0,(P.grind?(GS?GS.knee:0.6):!P.grounded?0.28:0.14)*(r.kneeOutK||1),Math.min(1,dt*12));   // rails: knees wide, skates together -> a V   // V stance: knees out, feet together
     for(const [leg,sd,lf] of [[r.L,-1,lift],[r.R,1,liftR]]){
       const splay=sd*((r.splay??0.06)+Math.max(0,sd<0?sw:-sw)*0.25);
       let lat=lerp(splay,-sd*r.hipX,P.feetIn);
@@ -3653,6 +3677,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
       _ax.set(lat,-dr,fwd).normalize(); _qa.setFromAxisAngle(_ax,-sd*P.kneeOut); leg.hip.quaternion.premultiply(_qa);
       // ankle exactly undoes the hip+knee rotation, so the skate stays level and points straight ahead (down the rail)
       _q.copy(leg.hip.quaternion).multiply(leg.knee.quaternion).invert(); leg.ankle.quaternion.identity().slerp(_q,flat);
+      if(r.crouchK&&P.grounded&&!P.grind) leg.ankle.quaternion.multiply(_qa.setFromAxisAngle(_ZA,clamp(P.turn,-1,1)*-0.3));   // carve: skates roll onto their edges in a turn
     }
   } else {
     r.L.hip.rotation.x=-ikA+sw-lift*0.4; r.R.hip.rotation.x=-ikA-sw-liftR*0.4;
@@ -3666,9 +3691,11 @@ function updateSkaterFor(dt,SK,P,isLocal){
   }
   r.aL.rotation.x=-sw*1.1; r.aR.rotation.x=sw*1.1;
   r.aL.rotation.z=lerp(r.aL.rotation.z,-armsOut*1.3-0.1,dt*10); r.aR.rotation.z=lerp(r.aR.rotation.z,armsOut*1.3+0.1,dt*10);
+  if(GS){ const wob=Math.sin(clock*2.7)*0.12; r.aL.rotation.x=GS.ax[0]+wob; r.aR.rotation.x=GS.ax[1]-wob; if(r.head) r.head.rotation.y=Math.sin(clock*0.8)*0.18-GS.twist*0.5*P.stance; }
+  else if(r.head&&r.crouchK) r.head.rotation.y=lerp(r.head.rotation.y,0,Math.min(1,dt*6));
   if(P.inJump&&P.grounded&&!P.grind&&r.crouchK){ r.aL.rotation.x=r.aR.rotation.x=0.85; }   // wind-up: arms swing back as the knees load
   if(GEST.active){ r.aR.rotation.x=-1.4; r.aR.rotation.z=0.3; }
-  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=(P.grind&&r.crouchK)?0.2:(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* grinds: sit back over the heels, chest up */   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?(r.crouchK?0.06:0.22)*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
+  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=GS?GS.lean-(P.grind.r?railTan(P.grind.r,P.grind.s,_gt).y*P.grind.dir:0)*0.9+Math.sin(clock*2.1)*0.04:(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* grinds: sit back over the heels, chest up */   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?(GS?(GS.twist+Math.sin(clock*1.3)*0.06)*P.stance:0.22*P.stance):0;   // lean over the skates, shoulders open toward the lead foot
   let by=r.upper?0:leanY, bx=r.upper?0:leanX;
   if(P.trick){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2), sg=P.trick.sgn, PI2=Math.PI*2;
     switch(P.trick.kind){
