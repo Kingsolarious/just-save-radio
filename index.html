@@ -2524,9 +2524,9 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const CHARS=[ {id:'crown',label:'CROWN',url:PLAYER_GLB}, {id:'punk',label:'PUNK',url:CHARACTER_URL,parts:true}, {id:'classic',label:'CLASSIC'} ];
+const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb'}, {id:'crown',label:'CROWN',url:PLAYER_GLB}, {id:'punk',label:'PUNK',url:CHARACTER_URL,parts:true}, {id:'classic',label:'CLASSIC'} ];
 if(UNLOCK.zero) CHARS.push({id:'zero',label:'ZERO'});
-let CHAR='crown';
+let CHAR='blader';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
   if(c.id==='classic'){ applyPlayerRig(makeSkater()); return; }
@@ -2535,7 +2535,7 @@ function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c
   loadPlayerModel(c.url,()=>applyPlayerRig(makeSkater())); }
 // a custom Mixamo model dropped in as characters/player.glb shows up as an extra choice
 fetch('characters/player.glb',{method:'HEAD'}).then(r=>{ if(r.ok){ CHARS.unshift({id:'custom',label:'CUSTOM',url:'characters/player.glb'}); } }).catch(()=>{}).finally(()=>{
-  let saved=null; try{ saved=localStorage.getItem('inkline_char'); }catch(e){}
+  let saved=null; try{ saved=localStorage.getItem('inkline_char'); if(!localStorage.getItem('inkline_char_blader')){ localStorage.setItem('inkline_char_blader','1'); saved='blader'; } }catch(e){}   /* everyone starts on the new rollerblader once; the CHARACTER button still switches */
   selectCharacter(CHARS.some(c=>c.id===saved)?saved:CHARS[0].id); });
 const USE_GLB_CHARACTER=false;   // legacy blockout loader below, kept for reference
 if(USE_GLB_CHARACTER) new GLTFLoader().load(CHARACTER_URL,gltf=>{
