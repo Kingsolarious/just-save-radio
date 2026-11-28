@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=54;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=55;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3622,59 +3622,78 @@ const _ZA=new V3(0,0,1), _gt=new V3(), _q=new THREE.Quaternion(), _qa=new THREE.
 //   ftL/ftR: ankle tilt on top of the automatic skate levelling
 // Every frame the body is lowered until the lower skate sits on the ground / rail, so feet never sink or float.
 const D2R=Math.PI/180;
-const MIR={hL:'hR',hR:'hL',kL:'kR',kR:'kL',aL:'aR',aR:'aL',fL:'fR',fR:'fL',ftL:'ftR',ftR:'ftL'};
-const mirrorPose=p=>{ const o={}; for(const k in p){ if(k==='t') continue; const v=p[k]; o[MIR[k]||k]=[v[0],-(v[1]||0),-(v[2]||0)]; } return o; };
+// Feet-first animation. Each pose places:
+//   hp:[x,y,z]   the pelvis, in leg-lengths (1 = his full leg), relative to the ground point under him
+//   fL/fR:[x,z,lift]  each skate on the ground (or rail), leg-lengths. x = his right(+)/left(-), z = forward(+)
+//   kO:[l,r]     how far each knee opens outward (degrees)
+//   up/hd [x,y,z] spine and head (x+ forward), aL/aR upper arms (x- forward, x+ back, z out: L-,R+), fL_/fR_ forearm bend (x-)
+// A two-bone solver turns hip + skate positions into hip and knee angles, so skates land exactly where they're told
+// (on the rail line, under his weight) and the skates are kept level. The 'L' side is his -X side.
+const MIR={fL:'fR',fR:'fL',aL:'aR',aR:'aL',eL:'eR',eR:'eL'};
+const mirrorPose=p=>{ const o={}; for(const k in p){ if(k==='t') continue; const v=p[k];
+  if(k==='hp') o.hp=[-v[0],v[1],v[2]]; else if(k==='kO') o.kO=[v[1],v[0]]; else if(k==='fL'||k==='fR') o[MIR[k]]=[-v[0],v[1],v[2]]; else o[MIR[k]||k]=[v[0],-(v[1]||0),-(v[2]||0)]; } return o; };
 const BA={
-  idle:[ {t:0,   up:[9,0,0],  hd:[-6,0,0], hL:[-16,0,-7], hR:[-12,4,7], kL:[28], kR:[22], aL:[4,0,-10], aR:[-2,0,10], fL:[-24], fR:[-18]},
-         {t:0.5, up:[12,0,0], hd:[-8,0,0], hL:[-19,0,-7], hR:[-15,4,7], kL:[33], kR:[27], aL:[1,0,-12], aR:[-5,0,12], fL:[-28], fR:[-22]} ],
-  // four beats: push left · glide on right · push right · glide on left
-  stride:(()=>{ const a={t:0,    up:[34,10,0], hd:[-28,-8,0], hL:[14,0,-42], kL:[8],  ftL:[0,0,-16], hR:[-50,0,5], kR:[70], aL:[48,0,-16], fL:[-28], aR:[-58,0,14], fR:[-72]},
-                      b={t:0.25, up:[31,0,0],  hd:[-26,0,0],  hL:[-62,0,-8], kL:[96], hR:[-52,0,5], kR:[72], aL:[10,0,-12], fL:[-38], aR:[-18,0,12], fR:[-48]};
+  idle:[ {t:0,   hp:[0,0.965,-0.02], fL:[-0.13,0.03,0], fR:[0.13,-0.03,0], kO:[8,8],  up:[8,0,0],  hd:[-6,0,0], aL:[4,0,-10], aR:[-2,0,10], eL:[-24], eR:[-18]},
+         {t:0.5, hp:[0,0.955,-0.02],fL:[-0.13,0.03,0], fR:[0.13,-0.03,0], kO:[9,9],  up:[11,0,0], hd:[-8,0,0], aL:[1,0,-12], aR:[-5,0,12], eL:[-28], eR:[-22]} ],
+  // four beats: push left (L foot out-back) · recover L under the hips, glide on R · push right · recover R
+  stride:(()=>{ const a={t:0,    hp:[0.06,0.68,-0.09], fL:[-0.42,-0.22,0],  fR:[0.06,0.06,0], kO:[16,10], up:[44,10,0], hd:[-36,-8,0], aL:[54,0,-14], aR:[-40,0,4],  eL:[-16], eR:[-46]},
+                      b={t:0.25, hp:[0.02,0.66,-0.09], fL:[-0.12,-0.02,0.1], fR:[0.05,0.03,0], kO:[12,10], up:[42,0,0],  hd:[-34,0,0],  aL:[14,0,-12], aR:[-10,0,10], eL:[-30], eR:[-36]};
                 return [a,b,{...mirrorPose(a),t:0.5},{...mirrorPose(b),t:0.75}]; })(),
-  fast:{ up:[46,0,0], hd:[-38,0,0], hL:[-62,0,-10], hR:[-62,0,10], kL:[96], kR:[96], aL:[60,0,-10], aR:[60,0,10], fL:[-20], fR:[-20]},   // tucked, arms back
-  load:{ up:[44,0,0], hd:[-34,0,0], hL:[-74,0,-12], hR:[-74,0,12], kL:[116], kR:[116], aL:[58,0,-14], aR:[58,0,14], fL:[-14], fR:[-14]},
-  air: { up:[16,0,0], hd:[-12,0,0], hL:[-64,0,-14], hR:[-48,0,14], kL:[100], kR:[78], ftL:[12], ftR:[12], aL:[-38,0,-58], aR:[-26,0,52], fL:[-42], fR:[-36]},
-  fall:{ up:[14,0,0], hd:[-14,0,0], hL:[-38,0,-12], hR:[-30,0,12], kL:[52], kR:[44], aL:[-22,0,-68], aR:[-18,0,64], fL:[-30], fR:[-28]},
-  land:{ up:[40,0,0], hd:[-32,0,0], hL:[-70,0,-15], hR:[-70,0,15], kL:[110], kR:[110], aL:[-32,0,-38], aR:[-30,0,38], fL:[-52], fR:[-50]},
-  slide:{up:[28,0,6], hd:[-22,0,0], hL:[-62,0,-22], hR:[-38,0,26], kL:[98], kR:[56], aL:[-32,0,-52], aR:[-10,0,48], fL:[-42], fR:[-30]},
-  wall:{ up:[22,0,0], hd:[-16,0,0], hL:[-56,0,-14], hR:[-44,0,14], kL:[86], kR:[68], aL:[-34,0,-72], aR:[-10,0,42], fL:[-36], fR:[-30]},
-  wallrun:{up:[18,0,0], hd:[-26,0,0], hL:[-70,0,-6], hR:[-20,0,6], kL:[100], kR:[40], aL:[-60,0,-20], aR:[30,0,20], fL:[-80], fR:[-60]},
-  bail:{ up:[-12,0,0], hd:[12,0,0], hL:[-86,0,-32], hR:[-60,0,30], kL:[120], kR:[78], aL:[-140,0,-42], aR:[-118,0,40], fL:[-30], fR:[-34]},
-  grind:{   // side-on: the rail runs left-right of him, skates across it, legs spread along it
-    regular:  { up:[16,0,0],   hL:[-50,0,-22], hR:[-46,0,22], kL:[92], kR:[86], ftL:[0,0,8], ftR:[0,0,-8], aL:[-14,0,-74], aR:[-6,0,70], fL:[-28], fR:[-24]},
-    backside: { up:[-8,0,-4],  hL:[-40,0,-24], hR:[-38,0,24], kL:[78], kR:[74], ftL:[0,0,8], ftR:[0,0,-8], aL:[30,0,-92], aR:[26,0,96], fL:[-16], fR:[-14]},
-    frontside:{ up:[36,0,0],   hL:[-60,0,-20], hR:[-56,0,20], kL:[106], kR:[100], ftL:[0,0,8], ftR:[0,0,-8], aL:[-40,0,-58], aR:[-30,0,62], fL:[-40], fR:[-34]},
-    fifty:    { up:[18,0,0],   hL:[-58,0,-6],  hR:[-6,0,6],   kL:[92], kR:[58], aL:[-22,0,-70], aR:[-16,0,72], fL:[-30], fR:[-28]},
-    blunt:    { up:[22,26,0],  hL:[-54,0,-20], hR:[-36,0,22], kL:[96], kR:[72], ftL:[0,0,8], ftR:[0,0,-8], aL:[10,0,-88], aR:[-30,0,68], fL:[-22], fR:[-42]} },
+  fast:{ hp:[0,0.68,-0.08], fL:[-0.15,0.02,0], fR:[0.15,-0.02,0], kO:[10,10], up:[44,0,0], hd:[-36,0,0], aL:[58,0,-10], aR:[58,0,10], eL:[-20], eR:[-20]},
+  load:{ hp:[0,0.6,-0.1],   fL:[-0.15,0.04,0], fR:[0.15,0.04,0],  kO:[14,14], up:[40,0,0], hd:[-32,0,0], aL:[58,0,-14], aR:[58,0,14], eL:[-14], eR:[-14]},
+  air: { hp:[0,0.86,0],     fL:[-0.15,0.06,0.22], fR:[0.15,-0.04,0.14], kO:[16,14], up:[14,0,0], hd:[-12,0,0], aL:[-40,0,-44], aR:[-24,0,40], eL:[-44], eR:[-36]},
+  fall:{ hp:[0,0.86,0],     fL:[-0.16,0.06,0.06], fR:[0.16,-0.02,0.04], kO:[12,12], up:[12,0,0], hd:[-12,0,0], aL:[-26,0,-52], aR:[-20,0,50], eL:[-32], eR:[-28]},
+  land:{ hp:[0,0.64,-0.08], fL:[-0.17,0.03,0], fR:[0.17,-0.01,0], kO:[16,16], up:[36,0,0], hd:[-30,0,0], aL:[-32,0,-38], aR:[-30,0,38], eL:[-52], eR:[-50]},
+  slide:{hp:[0.03,0.7,-0.06], fL:[-0.34,0.12,0], fR:[0.24,-0.1,0], kO:[18,12], up:[24,0,6], hd:[-20,0,0], aL:[-32,0,-52], aR:[-10,0,48], eL:[-42], eR:[-30]},
+  wall:{ hp:[0,0.8,-0.02],  fL:[-0.15,0.06,0], fR:[0.15,-0.06,0], kO:[12,12], up:[18,0,0], hd:[-16,0,0], aL:[-34,0,-72], aR:[-10,0,42], eL:[-36], eR:[-30]},
+  wallrun:{hp:[0,0.82,-0.04],fL:[-0.1,0.18,0.18], fR:[0.1,-0.12,0], kO:[8,8], up:[16,0,0], hd:[-24,0,0], aL:[-60,0,-20], aR:[30,0,20], eL:[-80], eR:[-60]},
+  bail:{ hp:[0,0.5,0],      fL:[-0.22,0.32,0.22], fR:[0.2,0.2,0.08], kO:[24,20], up:[-12,0,0], hd:[12,0,0], aL:[-140,0,-42], aR:[-118,0,40], eL:[-30], eR:[-34]},
+  // grinds: side-on (rail runs along his x), skates on the rail line (z = 0); the 50-50 rides along it (rail along z)
+  grind:{
+    regular:  { hp:[0,0.7,-0.1],   fL:[-0.24,0.02,0], fR:[0.24,0.02,0], kO:[8,8],  up:[16,0,0],  aL:[-40,0,-40], aR:[26,0,52],  eL:[-30], eR:[-18]},
+    backside: { hp:[0,0.78,0.04],  fL:[-0.23,0,0], fR:[0.23,0,0], kO:[6,6],  up:[-10,0,-4], aL:[-10,0,-50], aR:[44,0,62],  eL:[-24], eR:[-20]},
+    frontside:{ hp:[0,0.62,-0.19], fL:[-0.22,0.04,0], fR:[0.22,0.04,0], kO:[10,10], up:[36,0,0], aL:[-50,0,-30], aR:[-6,0,46], eL:[-34], eR:[-24]},
+    fifty:    { hp:[0,0.72,-0.06], fL:[-0.03,0.2,0], fR:[0.03,-0.2,0], kO:[14,14], up:[16,0,0], aL:[-34,0,-40], aR:[18,0,50], eL:[-30], eR:[-18]},
+    blunt:    { hp:[0.03,0.68,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
+  // tricks (airborne): feet relative to the body
   trick:{
-    tuck:    { up:[30,0,0], hd:[-20,0,0], hL:[-116,0,-8], hR:[-116,0,8], kL:[142], kR:[142], aL:[-52,0,-20], aR:[-52,0,20], fL:[-92], fR:[-92]},
-    spin:    { up:[10,0,0], hL:[-56,0,-6], hR:[-56,0,6], kL:[88], kR:[88], aL:[-24,0,-30], aR:[-24,0,30], fL:[-104], fR:[-104]},
-    grab:    { up:[34,0,0], hd:[-20,0,0], hL:[-104,0,-10], hR:[-96,0,10], kL:[136], kR:[130], aL:[-70,0,-6], aR:[-24,0,64], fL:[-16], fR:[-40]},
-    kick:    { up:[8,0,0], hL:[-96,0,-6], kL:[6], hR:[-40,0,10], kR:[102], aL:[-10,0,-82], aR:[-10,0,82], fL:[-14], fR:[-14]},
-    split:   { up:[20,0,0], hL:[-30,0,-82], hR:[-30,0,82], kL:[6], kR:[6], aL:[-10,0,-62], aR:[-10,0,62], fL:[-10], fR:[-10]},
-    rocket:  { up:[-8,0,0], hL:[-106,0,-6], hR:[-106,0,6], kL:[4], kR:[4], aL:[-82,0,-10], aR:[-82,0,10], fL:[-8], fR:[-8]},
-    superman:{ up:[0,0,0], hd:[-30,0,0], hL:[26,0,-8], hR:[26,0,8], kL:[14], kR:[14], aL:[-172,0,-10], aR:[-172,0,10], fL:[0], fR:[0]},
-    heli:    { up:[14,0,0], hL:[-62,0,-10], hR:[-62,0,10], kL:[102], kR:[102], aL:[-162,0,-18], aR:[-22,0,62], fL:[-10], fR:[-62]} },
-  spray:{ aR:[-86,0,10], fR:[-8], aL:[-12,0,-26], fL:[-52]} };
+    tuck:    { hp:[0,0.8,0],  fL:[-0.12,0.12,0.42], fR:[0.12,0.12,0.42], kO:[10,10], up:[28,0,0], hd:[-20,0,0], aL:[-52,0,-20], aR:[-52,0,20], eL:[-92], eR:[-92]},
+    spin:    { hp:[0,0.84,0], fL:[-0.12,0.04,0.2], fR:[0.12,0.04,0.2], kO:[8,8], up:[10,0,0], aL:[-24,0,-30], aR:[-24,0,30], eL:[-104], eR:[-104]},
+    grab:    { hp:[0,0.8,0],  fL:[-0.14,0.16,0.38], fR:[0.12,0.08,0.32], kO:[14,10], up:[32,0,0], hd:[-20,0,0], aL:[-70,0,-6], aR:[-24,0,64], eL:[-16], eR:[-40]},
+    kick:    { hp:[0,0.82,0], fL:[-0.1,0.62,0.4], fR:[0.12,-0.04,0.24], kO:[0,12], up:[6,0,0], aL:[-10,0,-82], aR:[-10,0,82], eL:[-14], eR:[-14]},
+    split:   { hp:[0,0.82,0], fL:[-0.74,0,0.3], fR:[0.74,0,0.3], kO:[0,0], up:[18,0,0], aL:[-10,0,-62], aR:[-10,0,62], eL:[-10], eR:[-10]},
+    rocket:  { hp:[0,0.82,0], fL:[-0.1,0.72,0.34], fR:[0.1,0.72,0.34], kO:[0,0], up:[-8,0,0], aL:[-82,0,-10], aR:[-82,0,10], eL:[-8], eR:[-8]},
+    superman:{ hp:[0,0.82,0], fL:[-0.12,-0.84,0.22], fR:[0.12,-0.84,0.22], kO:[0,0], up:[0,0,0], hd:[-30,0,0], aL:[-172,0,-10], aR:[-172,0,10], eL:[0], eR:[0]},
+    heli:    { hp:[0,0.82,0], fL:[-0.12,0.1,0.36], fR:[0.12,0.1,0.36], kO:[10,10], up:[14,0,0], aL:[-162,0,-18], aR:[-22,0,62], eL:[-10], eR:[-62]} },
+  spray:{ aR:[-86,0,10], eR:[-8], aL:[-12,0,-26], eL:[-52]} };
 const TRICK_POSE={flip:'tuck',flip2:'tuck',bflip:'tuck',bflip2:'tuck',cork:'tuck',twist:'tuck',side:'tuck',side2:'tuck',spin:'spin',spin2:'spin',grab:'grab',grab2:'grab',kick:'kick',kickspin:'kick',split:'split',rocket:'rocket',superman:'superman',heli:'heli'};
-const AJ=['up','hd','hL','hR','kL','kR','aL','aR','fL','fR','ftL','ftR'];
+const AJ=['hp','fL','fR','kO','up','hd','aL','aR','eL','eR'];
 const smooth01=t=>t*t*(3-2*t);
-function samplePose(keys,ph){ ph=((ph%1)+1)%1; let i=keys.length-1; while(i>0&&keys[i].t>ph) i--; const a=keys[i], b=keys[(i+1)%keys.length], t1=b.t>a.t?b.t:1+b.t, u=smooth01((ph-a.t)/(t1-a.t)), o={};
-  for(const k of AJ){ const va=a[k]||[0,0,0], vb=b[k]||[0,0,0]; o[k]=[0,1,2].map(j=>lerp(va[j]||0,vb[j]||0,u)); } return o; }
-function mixPose(a,b,u){ const o={}; for(const k of AJ){ const va=a[k]||[0,0,0], vb=b[k]||[0,0,0]; o[k]=[0,1,2].map(j=>lerp(va[j]||0,vb[j]||0,u)); } return o; }
-const _aq=new THREE.Quaternion(), _ae=new THREE.Euler(), _av=new V3(), _aw=new V3();
+function samplePose(keys,ph){ ph=((ph%1)+1)%1; let i=keys.length-1; while(i>0&&keys[i].t>ph) i--; const a=keys[i], b=keys[(i+1)%keys.length], t1=b.t>a.t?b.t:1+b.t, u=smooth01((ph-a.t)/(t1-a.t)); return mixPose(a,b,u); }
+function mixPose(a,b,u){ const o={}; for(const k of AJ){ const va=a[k]||ZP[k], vb=b[k]||ZP[k]; o[k]=[0,1,2].map(j=>lerp(va[j]||0,vb[j]||0,u)); } return o; }
+const ZP={hp:[0,0.85,0],fL:[-0.12,0,0],fR:[0.12,0,0],kO:[8,8],up:[0,0,0],hd:[0,0,0],aL:[0,0,-10],aR:[0,0,10],eL:[-20],eR:[-20]};
+const _aq=new THREE.Quaternion(), _aq2=new THREE.Quaternion(), _ae=new THREE.Euler(), _av=new V3(), _aw=new V3(), _ad=new V3(), _at=new V3(), _ap=new V3(), _an=new V3(), _ax0=new V3(), _DN=new V3(0,-1,0), _X=new V3(1,0,0), _bq=new THREE.Quaternion();
+// two-bone leg: hip joint -> ankle target (both in body space), knee pointing along 'pole' opened by 'out' radians
+function solveLeg(leg,L1,L2,target,pole,side){
+  _ad.subVectors(target,leg.hip.position); let D=_ad.length(); const dn=_ad.clone().normalize(); D=clamp(D,Math.abs(L1-L2)+0.01,L1+L2-0.004);
+  const a=Math.acos(clamp((L1*L1+D*D-L2*L2)/(2*L1*D),-1,1)), kneeIn=Math.acos(clamp((L1*L1+L2*L2-D*D)/(2*L1*L2),-1,1));
+  _ap.copy(pole).addScaledVector(dn,-pole.dot(dn)).normalize();                       // knee direction, square to the hip->ankle line
+  _at.copy(dn).multiplyScalar(Math.cos(a)).addScaledVector(_ap,Math.sin(a)).normalize(); // thigh direction
+  _an.crossVectors(_ap,_at).normalize();                                                // knee hinge axis
+  _aq.setFromUnitVectors(_DN,_at); _ax0.copy(_X).applyQuaternion(_aq);                  // twist so the hinge lines up
+  const tw=Math.atan2(_at.dot(_aw.crossVectors(_ax0,_an)),_ax0.dot(_an)); _aq2.setFromAxisAngle(_at,tw); leg.hip.quaternion.copy(_aq2.multiply(_aq));
+  leg.knee.rotation.set(Math.PI-kneeIn,0,0); return D; }
 function animateBlader(dt,r,P,hs){
-  const S=r._anim??={cur:null,wasG:true,landT:0,bodyY:null};
-  if(P.grounded&&!S.wasG&&!P.grind) S.landT=0.32; S.wasG=P.grounded||!!P.grind; S.landT=Math.max(0,S.landT-dt);
+  const S=r._anim??={cur:null,wasG:true,landT:0};
+  if(P.grounded&&!S.wasG&&!P.grind) S.landT=0.3; S.wasG=P.grounded||!!P.grind; S.landT=Math.max(0,S.landT-dt);
   const side=p=>P.stance<0?mirrorPose(p):p;
-  let tgt, rate=14;
-  if(P.knock>0){ tgt=BA.bail; rate=18; }
-  else if(P.grind){ const g=BA.grind[P.grindStyle]||BA.grind.regular; tgt=side(g); rate=P.grindLand>0?24:10;
-    const sw=Math.sin(clock*2.2), sl=P.grind.r?railTan(P.grind.r,P.grind.s,_gt).y*P.grind.dir:0;   // balance sway, lean into down-rails
-    const gy=(GRIND_STYLES[P.grindStyle]||{yaw:0}).yaw*P.stance;   // head turns to look down the rail
-    tgt={...tgt,up:[tgt.up[0]-sl*30+sw*2,tgt.up[1]-gy*0.15+Math.sin(clock*1.3)*4,tgt.up[2]],aL:[tgt.aL[0]+sw*7,tgt.aL[1],tgt.aL[2]+sw*4],aR:[tgt.aR[0]-sw*7,tgt.aR[1],tgt.aR[2]+sw*4],hd:[-8,-gy*0.55+Math.sin(clock*0.8)*6,0]};
-    if(P.grindLand>0){ const d=P.grindLand*45; tgt={...tgt,kL:[tgt.kL[0]+d],kR:[tgt.kR[0]+d],hL:[tgt.hL[0]-d*0.5,0,tgt.hL[2]],hR:[tgt.hR[0]-d*0.5,0,tgt.hR[2]]}; } }
-  else if(P.wall){ tgt=P.wall.up?BA.wallrun:BA.wall; const into=(P.wall.n.x*Math.cos(P.facing)-P.wall.n.z*Math.sin(P.facing))>0; if(!P.wall.up&&into) tgt=mirrorPose(tgt); }
+  let tgt, rate=14, onGround=P.grounded||!!P.grind;
+  if(P.knock>0){ tgt=BA.bail; rate=16; onGround=false; }
+  else if(P.grind){ tgt=side(BA.grind[P.grindStyle]||BA.grind.regular); rate=P.grindLand>0?22:10;
+    const sw=Math.sin(clock*2.2), sl=P.grind.r?railTan(P.grind.r,P.grind.s,_gt).y*P.grind.dir:0, gy=(GRIND_STYLES[P.grindStyle]||{yaw:0}).yaw*P.stance;
+    tgt={...tgt,up:[tgt.up[0]-sl*30+sw*2,(tgt.up[1]||0)-gy*0.15+Math.sin(clock*1.3)*4,tgt.up[2]||0],hp:[tgt.hp[0]+sw*0.012,tgt.hp[1]-(P.grindLand||0)*0.35,tgt.hp[2]],
+      aL:[tgt.aL[0]+sw*7,0,tgt.aL[2]+sw*4],aR:[tgt.aR[0]-sw*7,0,tgt.aR[2]+sw*4],hd:[-8,-gy*0.55+Math.sin(clock*0.8)*6,0]}; }
+  else if(P.wall){ tgt=P.wall.up?BA.wallrun:BA.wall; onGround=false; }
   else if(!P.grounded){ tgt=P.vel.y>-3?BA.air:mixPose(BA.air,BA.fall,clamp((-P.vel.y-3)/6,0,1));
     if(P.trick){ const tp=BA.trick[TRICK_POSE[P.trick.kind]||'tuck'], k=clamp(P.trick.t/P.trick.dur,0,1), env=Math.min(1,Math.sin(k*Math.PI)*1.6); tgt=mixPose(tgt,P.stance<0?mirrorPose(tp):tp,env); rate=22; } }
   else if(P.inJump){ tgt=BA.load; rate=20; }
@@ -3683,20 +3702,24 @@ function animateBlader(dt,r,P,hs){
   else if(hs>1.5){ const st=samplePose(BA.stride,(P.stride||0)/(Math.PI*2)); tgt=hs>17?mixPose(st,BA.fast,clamp((hs-17)/8,0,0.8)):st; rate=16; }
   else { tgt=samplePose(BA.idle,clock/3.2); rate=6; }
   if(GEST.active&&!P.grind) tgt={...tgt,...BA.spray};
-  // ease toward the target pose
-  const k=1-Math.exp(-dt*rate); if(!S.cur){ S.cur={}; for(const j of AJ) S.cur[j]=(tgt[j]||[0,0,0]).slice(); }
-  for(const j of AJ){ const t=tgt[j]||[0,0,0], c=S.cur[j]; for(let i=0;i<3;i++) c[i]=lerp(c[i],t[i]||0,k); }
+  const k=1-Math.exp(-dt*rate); if(!S.cur){ S.cur={}; for(const j of AJ) S.cur[j]=(tgt[j]||ZP[j]).slice(); }
+  for(const j of AJ){ const t=tgt[j]||ZP[j], c=S.cur[j]; for(let i=0;i<3;i++) c[i]=lerp(c[i]||0,t[i]||0,k); }
   const C=S.cur, E=(o,v)=>o.rotation.set((v[0]||0)*D2R,(v[1]||0)*D2R,(v[2]||0)*D2R);
   E(r.upper,C.up); if(r.head) E(r.head,C.hd);
-  E(r.aL,C.aL); E(r.aR,C.aR); if(r.fL) E(r.fL,C.fL); if(r.fR) E(r.fR,C.fR);
-  for(const [leg,h,kn,ft] of [[r.L,C.hL,C.kL,C.ftL],[r.R,C.hR,C.kR,C.ftR]]){ E(leg.hip,h); leg.knee.rotation.set((kn[0]||0)*D2R,0,0);
-    _aq.copy(leg.hip.quaternion).multiply(leg.knee.quaternion).invert();   // keep the skate level whatever the leg does
-    leg.ankle.quaternion.copy(_aq).multiply(_aq.clone().setFromEuler(_ae.set((ft[0]||0)*D2R,(ft[1]||0)*D2R,((ft[2]||0)+(P.grounded&&!P.grind?-clamp(P.turn,-1,1)*14:0))*D2R))); }
-  // plant the lower skate on the ground / rail (held still mid-trick so flips don't wobble)
-  if(!P.grounded&&!P.grind&&P.trick&&S.bodyY!=null){ r.body.position.y=S.bodyY; return; }
-  r.body.position.y=0; r.root.updateMatrixWorld(true);
-  let lo=1e9; for(const leg of [r.L,r.R]){ leg.ankle.getWorldPosition(_av); r.root.worldToLocal(_av); lo=Math.min(lo,_av.y); }
-  const want=r.ANK-lo; S.bodyY=S.bodyY==null?want:lerp(S.bodyY,want,Math.min(1,dt*(P.grounded||P.grind?30:12))); r.body.position.y=S.bodyY;
+  E(r.aL,C.aL); E(r.aR,C.aR); if(r.fL) r.fL.rotation.set((C.eL[0]||0)*D2R,0,0); if(r.fR) r.fR.rotation.set((C.eR[0]||0)*D2R,0,0);
+  // pelvis + skates (leg-length units -> metres)
+  const LEG=r.L1+r.L2s; r.body.position.set(C.hp[0]*LEG,r.ANK-r.L.hip.position.y+C.hp[1]*LEG,C.hp[2]*LEG);   // hp.y = hip-joint height over the ankles: 1 = straight legs
+  r.body.updateMatrix(); _bq.copy(r.body.quaternion).invert();
+  for(const [leg,f,o,sd] of [[r.L,C.fL,C.kO[0],-1],[r.R,C.fR,C.kO[1],1]]){
+    // skate target in root space: on the ground plane (ankle sits ANK above the sole); airborne poses are relative to the pelvis
+    _av.set(f[0]*LEG,(f[2]||0)*LEG+r.ANK,f[1]*LEG);
+    _av.sub(r.body.position); if(onGround) _av.applyQuaternion(_bq);                    // planted: undo the body's tilt; airborne / on a wall: the feet lean with him
+    const pole=new V3(Math.sin(sd*o*D2R),0,Math.cos(o*D2R));                             // knees forward, opened outward
+    solveLeg(leg,r.L1,r.L2s,_av,pole,sd);
+    if(onGround) _aq.copy(r.body.quaternion).multiply(leg.hip.quaternion).multiply(leg.knee.quaternion).invert();   // skate level with the ground
+    else _aq.copy(leg.hip.quaternion).multiply(leg.knee.quaternion).invert();                                    // level with his own body
+    const carve=onGround&&!P.grind?-clamp(P.turn,-1,1)*14:0;
+    leg.ankle.quaternion.copy(onGround||P.wall?_aq:_aq.slerp(_aq2.identity(),0.35)).multiply(_aq2.setFromEuler(_ae.set(0,0,carve*D2R))); }
 }
 function updateSkater(dt){ P.inJump=held('jump'); P.inDrift=held('drift'); P.inBoost=held('boost'); updateSkaterFor(dt,SK,P,true); }
 // the full animator, for any rig + movement state (remote crew run through it too)
@@ -4449,6 +4472,7 @@ function frame(now){
   post.render();
 }
 requestAnimationFrame(frame);
+window.__THREE__=THREE;   // debug tools (pose audit)
 window.__poseOnly=(n=30,dt=1/60)=>{ for(let i=0;i<n;i++) updateSkaterFor(dt,SK,P,true); };   // debug: run just the character pose (no physics) for pose review
 window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); pressed.clear(); } };   // debug: advance the simulation without waiting for frames
 window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
