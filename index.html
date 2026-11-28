@@ -176,6 +176,7 @@
 <div id="title" class="screen">
   <div class="logo">JUST SAVE<br><span class="logo-zero">RADIO</span></div>
   <div class="sub">FREQUENCY ZERO</div>
+  <div id="buildtag" style="font:11px Bungee, Impact, sans-serif;opacity:0.55;letter-spacing:1px">BUILD</div>
   <div class="hidden" id="dname">HARBOR HEIGHTS</div>
   <div class="row"><span>CREW TAG</span><input id="crew" maxlength="8" value="NOVA" spellcheck="false"></div>
   <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="levelbtn" class="tool hidden">LEVEL: STORY</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
@@ -2450,7 +2451,8 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
   const rigK=model.scale.x, wheels=[], springs=[];
   src.traverse(o=>{ if(!o.isBone) return; const u=o.userData||{}; const qw=o.getWorldQuaternion(new THREE.Quaternion());
     if(u.wheel&&u.axis) wheels.push({b:o,q0:o.quaternion.clone(),axis:new V3(...u.axis).applyQuaternion(qw.clone().invert()).normalize(),r:(u.radius||0.04)*rigK,a:0});
-    if(u.spring&&u.tip){ const t=new V3(...u.tip); springs.push({b:o,q0:o.quaternion.clone(),dir:t.clone().normalize(),len:t.length()*rigK,k:u.stiff||80,d:u.damp||8,max:u.max||0.5,S:null,V:new V3()}); } });
+    if(u.spring&&u.tip){ const t=new V3(...u.tip); springs.push({b:o,q0:o.quaternion.clone(),dir:t.clone().normalize(),len:t.length()*rigK,k:(u.stiff||80)*0.45,d:(u.damp||8)*0.55,max:(u.max||0.5)*1.4,S:null,V:new V3()}); }
+    if(u.wheel) o.traverse(m=>{ if(!m.isMesh||!m.material||!m.material.color||m.material.side===THREE.BackSide) return; const c=m.material.color.getHex(); if(Math.abs((c>>16)-0x2a)<6&&Math.abs(((c>>8)&255)-0x2a)<6&&Math.abs((c&255)-0x30)<6) m.material.color.set(0x3fd4ff); });   /* cyan hubs: you can see the wheels turn */ });
   const _bx=new V3(1,0,0), _wq=new THREE.Quaternion(), _sv=new V3(), _sb=new V3(), _st=new V3(), _d=new THREE.Quaternion(), _i=new THREE.Quaternion(), _w=new THREE.Quaternion(), _pw=new THREE.Quaternion(), _a=new V3(), _f=new V3(), _h=new V3(), _e=new V3();
   const L1=BP.LeftUpLeg.distanceTo(BP.LeftLeg), L2s=BP.LeftLeg.distanceTo(BP.LeftFoot), ANK=BP.LeftFoot.y;
   // ---- animation clips: slots picked by game state, crossfaded, then blended per body region with the procedural pose
@@ -2554,7 +2556,9 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb'} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
+const BUILD=52;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+{ const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
+const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
@@ -3239,8 +3243,8 @@ const GRIND_STYLES={
   regular:  {name:'Grind',          lean:0.2,  twist:0.15, crouch:1,    arms:1.0, ax:[-0.2,0.3],  stag:0.02, knee:1.15},
   backside: {name:'Backside Grind', lean:-0.25,twist:-0.2, crouch:0.9,  arms:1.3, ax:[0.35,0.45], stag:0.06, knee:1.15},
   frontside:{name:'Frontside Grind',lean:0.55, twist:0.1,  crouch:1,    arms:0.8, ax:[-0.6,-0.3], stag:0.02, knee:1.0},
-  fifty:    {name:'50-50',          lean:0.12, twist:0,    crouch:0.85, arms:1.0, ax:[-0.3,-0.3], stag:0.2,  knee:0.55},
-  blunt:    {name:'Bluntside',      lean:0.25, twist:0.7,  crouch:0.95, arms:1.1, ax:[0.2,-0.5],  stag:0.14, knee:0.8} };
+  fifty:    {name:'50-50',          lean:0.12, twist:0,    crouch:0.85, arms:1.0, ax:[-0.3,-0.3], stag:0.09, knee:0.6},
+  blunt:    {name:'Bluntside',      lean:0.25, twist:0.7,  crouch:0.95, arms:1.1, ax:[0.2,-0.5],  stag:0.06, knee:0.85} };
 const GRIND_KEYS=Object.keys(GRIND_STYLES);
 function startGrind(r,s){
   rumble(0.15,0.45,140); { const q=railPt(r,s,new V3()); (P.snapOff??=new V3()).add(P.pos.clone().sub(q)).clampLength(0,2.5); }   // ease the body onto the rail instead of teleporting
@@ -3662,7 +3666,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
       const splay=sd*((r.splay??0.06)+Math.max(0,sd<0?sw:-sw)*0.25);
       let lat=lerp(splay,-sd*r.hipX,P.feetIn);
       let fwd=(sd<0?sw:-sw)*0.6+(sd<0?P.stag:-P.stag)+(r.crouchK?P.feetIn*(r.grindFwd??0.16):0);   // rails: sit back, skates a touch ahead of the hips so the knees come up
-      let dr=drop-lf*0.15-swapTuck*0.18;
+      let dr=drop+(r.crouchK?leg.hip.position.y:0)-lf*0.15-swapTuck*0.18;   // measure from the real hip joint (below the hips bone), or the skates sink into the floor
       if(P.trick){ const env=Math.sin(clamp(P.trick.t/P.trick.dur,0,1)*Math.PI), lead=(sd<0)===(P.stance>0);
         switch(P.trick.kind){
           case 'kick': case 'kickspin': if(lead){ fwd+=0.62*env; dr-=0.3*env; } else fwd-=0.15*env; break;   // lead leg snaps out
@@ -3926,7 +3930,7 @@ function setPaused(on){
   $('pause').classList.toggle('hidden',!on); if(!on){ $('quitConfirm').classList.add('hidden'); $('controlsPanel').classList.add('hidden'); $('friendPanel').classList.add('hidden'); }
   if(AU.ctx){ if(on) AU.ctx.suspend(); else AU.ctx.resume(); }
   if(on){ saveRun(); try{ document.exitPointerLock(); }catch(e){}
-    $('pfriends').classList.toggle('hidden',!(MP.live&&MP.peers.size)); $('pauseinfo').textContent=`${D.name} · ${tagSpots.filter(s=>s.done).length}/${tagSpots.length} · CITY ${tagsDone}/${TOTAL_TAGS} · ${fmtTime(runTime)}`; }
+    $('pfriends').classList.toggle('hidden',!(MP.live&&MP.peers.size)); $('pauseinfo').textContent=`BUILD ${BUILD} · ${D.name} · ${tagSpots.filter(s=>s.done).length}/${tagSpots.length} · CITY ${tagsDone}/${TOTAL_TAGS} · ${fmtTime(runTime)}`; }
   MENU.screen=null; menuFocus();
 }
 $('presume').onclick=()=>{ setPaused(false); try{ const r=canvas.requestPointerLock(); if(r&&r.catch) r.catch(()=>{}); }catch(e){} };
