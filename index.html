@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=65;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=66;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD,style:{armAmp:1,strideK:1}}, {id:'boho',label:'LAI',url:'characters/boho.glb?v='+BUILD,style:{armAmp:0.55,strideK:0.82}} ];   // style: arm swing size, stride rate   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3757,6 +3757,32 @@ function animateBlader(dt,r,P,hs){
     const carve=onGround&&!P.grind?-clamp(P.turn,-1,1)*14:0;
     leg.ankle.quaternion.copy(onGround||P.wall?_aq:_aq.slerp(_aq2.identity(),P.trick||P.knock>0?0.92:0.45)).multiply(_aq2.setFromEuler(_ae.set(0,0,carve*D2R))); }   // mid-trick the ankles relax: skates follow the shins instead of twisting out sideways
 }
+/* Skate streaks: a soft ribbon behind each skate that fades and thins with age - a smooth motion blur rather than dots.
+   Strength rises with speed; colour follows what you're doing (rolling / grinding / boosting / top flow). */
+const TRAIL_N=28, TRAIL_LIFE=0.32, _tc=new THREE.Color(), _tp=new V3(), _tdir=new V3(), _tside=new V3();
+function skateTrails(r,P,dt,hs){
+  const T=r._trails??=[0,1].map(()=>{ const g=new THREE.BufferGeometry(), pos=new Float32Array(TRAIL_N*2*3), cl=new Float32Array(TRAIL_N*2*4), idx=[];
+      for(let i=0;i<TRAIL_N-1;i++){ const a=i*2; idx.push(a,a+1,a+2,a+1,a+3,a+2); }
+      g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('color',new THREE.BufferAttribute(cl,4)); g.setIndex(idx);
+      const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false}));
+      m.frustumCulled=false; m.renderOrder=5; m.userData.dyn=true; scene.add(m); return {m,pts:[]}; });
+  const on=(P.grounded||P.grind||P.wall)&&state==='play'&&r.root.visible!==false, str=on?clamp((hs-7)/9,0,1):0;
+  if(FLOW.state===3) _tc.setHSL((clock*0.35)%1,0.85,0.58); else _tc.set(P.grind?0xff9d2a:P.inBoost?0xff4a3a:0xd9e84b);
+  const up=_UP;
+  [r.L,r.R].forEach((leg,k)=>{ const tr=T[k];
+    for(const p of tr.pts) p.age+=dt; while(tr.pts.length&&tr.pts[tr.pts.length-1].age>TRAIL_LIFE) tr.pts.pop();
+    leg.ankle.getWorldPosition(_tp); _tp.addScaledVector(up,-(r.ANK||0.25)*0.75);            // down at the wheels
+    if(str>0.02){ const last=tr.pts[0]; if(!last||last.p.distanceToSquared(_tp)>0.0016) tr.pts.unshift({p:_tp.clone(),age:0,s:str}); else { last.p.copy(_tp); last.s=str; }
+      if(tr.pts.length>TRAIL_N) tr.pts.length=TRAIL_N; }
+    const pos=tr.m.geometry.attributes.position, cl=tr.m.geometry.attributes.color, n=tr.pts.length;
+    for(let i=0;i<TRAIL_N;i++){ const a=i*2;
+      if(i>=n||n<2){ for(const j of [a,a+1]){ pos.setXYZ(j,0,-999,0); cl.setXYZW(j,0,0,0,0); } continue; }
+      const p=tr.pts[i], q=tr.pts[Math.min(n-1,i+1)], o=tr.pts[Math.max(0,i-1)]; _tdir.subVectors(o.p,q.p); if(_tdir.lengthSq()<1e-8) _tdir.set(0,0,1);
+      _tside.crossVectors(_tdir,up).normalize(); const life=1-p.age/TRAIL_LIFE, w=0.07*(0.35+0.65*life)*(0.6+0.4*p.s), al=Math.pow(Math.max(0,life),1.3)*p.s*0.8;
+      pos.setXYZ(a,p.p.x+_tside.x*w,p.p.y+0.02,p.p.z+_tside.z*w); pos.setXYZ(a+1,p.p.x-_tside.x*w,p.p.y+0.02,p.p.z-_tside.z*w);
+      cl.setXYZW(a,_tc.r,_tc.g,_tc.b,al); cl.setXYZW(a+1,_tc.r,_tc.g,_tc.b,al); }
+    pos.needsUpdate=true; cl.needsUpdate=true; tr.m.visible=n>1; });
+}
 function updateSkater(dt){ P.inJump=held('jump'); P.inDrift=held('drift'); P.inBoost=held('boost'); updateSkaterFor(dt,SK,P,true); }
 // the full animator, for any rig + movement state (remote crew run through it too)
 function updateSkaterFor(dt,SK,P,isLocal){
@@ -3873,9 +3899,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   r.root.visible=!(P.invuln>0&&Math.floor(performance.now()/90)%2===0);
   if(r.anim) animateBlader(dt,r,P,hs);   // BLADER: authored poses replace the procedural limb formulas
   if(r.retarget) r.retarget(dt);
-  if(hs>11&&(P.grounded||P.grind||P.wall)&&state==='play'){
-    const col=FLOW.state===3?new THREE.Color().setHSL((clock*0.6)%1,0.9,0.6):(P.grind?0xf2a52f:(P.inBoost?0xe94b42:0xd9e84b));
-    for(const leg of [r.L,r.R]){ leg.knee.getWorldPosition(tmp2); tmp2.y-=0.5; emit(tmp2,new V3(0,0.2,0),col,FLOW.state>=2?0.45:0.28,0.1,0); } }
+  skateTrails(r,P,dt,hs);   // smooth motion-blur streaks behind the skates (replaces the old dot particles)
   if(!isLocal) return;
   const gh=ground(P.pos.x,P.pos.z,P.pos.y+0.05).h; blob.position.set(P.pos.x,gh+0.03,P.pos.z); const air=P.pos.y-gh; blob.scale.setScalar(clamp(1-air*0.06,0.4,1)); blob.material.opacity=clamp(0.35-air*0.02,0.12,0.35);
 }
