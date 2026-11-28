@@ -76,6 +76,13 @@
   #padtoast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:#1b1724e6; color:#d9e84b; font:15px Bungee, Impact, sans-serif; padding:8px 16px; border-radius:10px; z-index:40; pointer-events:none; opacity:0; transition:opacity .3s; }
   #padhint { display:none; } @media (pointer:coarse) { #padhint { display:block; } }
   #mphud { position:fixed; top:14px; left:50%; transform:translateX(-50%); font:13px Bungee, Impact, sans-serif; color:#fff; background:#1b1724cc; padding:4px 12px; border-radius:10px; z-index:6; pointer-events:none; letter-spacing:1px; }
+  #fmarks { position:fixed; inset:0; pointer-events:none; z-index:6; }
+  #fmarks .fm { position:absolute; left:0; top:0; transform:translate(-50%,-100%); text-align:center; font:17px Bungee, Impact, sans-serif; color:#d9e84b; letter-spacing:1px; text-shadow:3px 3px 0 #1b1724, -2px -2px 0 #1b1724, 2px -2px 0 #1b1724, -2px 2px 0 #1b1724; white-space:nowrap; zoom:var(--ui,1); }
+  #fmarks .fm b { display:block; font-size:38px; line-height:32px; animation:fmbob 1s ease-in-out infinite; }
+  #fmarks .fm.edge { transform:translate(-50%,-50%); background:#1b1724cc; border:2px solid #d9e84b; border-radius:10px; padding:3px 8px 4px; }
+  #fmarks .fm.edge b { animation:none; font-size:20px; line-height:18px; }
+  @keyframes fmbob { 50% { transform:translateY(5px); } }
+  #friendList { display:flex; flex-direction:column; gap:10px; align-items:center; }
   #lockon { position:fixed; left:0; top:0; width:0; height:0; pointer-events:none; z-index:6; }
   #lockon i { position:absolute; left:-46px; top:-46px; width:92px; height:92px; border:4px solid #d9e84b; border-radius:50%; box-shadow:0 0 0 3px #1b1724, inset 0 0 0 3px #1b1724; animation:lockspin 1.4s linear infinite; border-style:dashed; }
   #lockon.inrange i { border-color:#ff3d8b; border-style:solid; animation:lockpulse .5s ease-in-out infinite alternate; }
@@ -200,6 +207,7 @@
   <div class="note">Everyone on the same room code skates together. Tags are shared: any wall your crew claims counts for everyone in the room. Friends join by opening this game's address, entering their access code and using the same room code.</div>
 </div>
 <div id="mphud" class="hidden"></div>
+<div id="fmarks"></div>
 <div id="rotate"><div class="ph"></div>TURN YOUR PHONE SIDEWAYS<small style="font-size:12px;opacity:.7">JUST SAVE RADIO PLAYS IN LANDSCAPE</small></div>
 <div id="padtoast"></div>
 <div id="controlsPanel" class="screen hidden">
@@ -237,10 +245,17 @@
   <div class="logo" style="font-size:clamp(48px,9vw,80px)">PAUSED</div>
   <div class="sub" id="pauseinfo"></div>
   <button id="presume">RESUME</button>
+  <button id="pfriends" class="tool hidden">SKATE TO A FRIEND</button>
   <button id="pcontrols" class="tool">CONTROLS</button>
   <button id="pcam" class="tool">CAMERA: NORMAL</button>
   <button id="pfs" class="tool">FULLSCREEN</button>
   <button id="pquit" class="tool">QUIT TO TITLE</button>
+</div>
+<div id="friendPanel" class="screen hidden">
+  <div class="logo" style="font-size:clamp(36px,7vw,60px)">FRIENDS</div>
+  <div class="note" id="friendnote">Fast travel right next to a crewmate, even in another district.</div>
+  <div id="friendList"></div>
+  <button id="fback" class="tool">BACK</button>
 </div>
 <div id="quitConfirm" class="screen hidden">
   <div class="sub">QUIT TO TITLE?</div>
@@ -3822,7 +3837,7 @@ $('edit').onclick=openEditor;
 
 // ====================================================================== MENU NAVIGATION (controller stick / d-pad, keyboard arrows)
 const MENU={i:0,screen:null,prev:new Set(),repeat:0,lastY:0};
-function menuScreen(){ if(!$('gate').classList.contains('hidden')) return 'gate'; if(!$('mpPanel').classList.contains('hidden')) return 'mpPanel'; if(!$('quitConfirm').classList.contains('hidden')) return 'quitConfirm'; if(!$('controlsPanel').classList.contains('hidden')) return 'controlsPanel'; if(state==='play'&&paused) return 'pause'; if(state==='title') return 'title'; if(state==='end') return 'end'; return null; }
+function menuScreen(){ if(!$('gate').classList.contains('hidden')) return 'gate'; if(!$('mpPanel').classList.contains('hidden')) return 'mpPanel'; if(!$('quitConfirm').classList.contains('hidden')) return 'quitConfirm'; if(!$('friendPanel').classList.contains('hidden')) return 'friendPanel'; if(!$('controlsPanel').classList.contains('hidden')) return 'controlsPanel'; if(state==='play'&&paused) return 'pause'; if(state==='title') return 'title'; if(state==='end') return 'end'; return null; }
 function menuItems(id){ return [...document.querySelectorAll('#'+id+' button')].filter(b=>b.offsetParent!==null); }
 function menuFocus(){ const id=menuScreen(); document.querySelectorAll('.navfocus').forEach(e=>e.classList.remove('navfocus'));
   if(!id||pad.kind==='none'&&!MENU.keyboard) return; const it=menuItems(id); if(!it.length) return;
@@ -3830,16 +3845,16 @@ function menuFocus(){ const id=menuScreen(); document.querySelectorAll('.navfocu
   MENU.i=(MENU.i+it.length)%it.length; it[MENU.i].classList.add('navfocus'); }
 function menuMove(d){ const it=menuItems(menuScreen()); if(!it.length) return; MENU.i=(MENU.i+d+it.length)%it.length; menuFocus(); blip(700,0.04,'square',0.05); }
 function menuSelect(){ const it=menuItems(menuScreen()); const b=it[MENU.i]; if(b){ blip(980,0.06,'square',0.06); b.click(); MENU.screen=null; menuFocus(); } }
-function menuBack(){ const id=menuScreen(); if(id==='mpPanel') $('mpback').click(); else if(id==='controlsPanel') $('ctrlback').click(); else if(id==='quitConfirm') $('qno').click(); else if(id==='pause') setPaused(false); else return; MENU.screen=null; menuFocus(); }
+function menuBack(){ const id=menuScreen(); if(id==='mpPanel') $('mpback').click(); else if(id==='controlsPanel') $('ctrlback').click(); else if(id==='quitConfirm') $('qno').click(); else if(id==='friendPanel') $('fback').click(); else if(id==='pause') setPaused(false); else return; MENU.screen=null; menuFocus(); }
 function openControls(on){ const origin=state==='play'?$('pause'):$('title'); $('controlsPanel').classList.toggle('hidden',!on); origin.classList.toggle('hidden',on); MENU.screen=null; menuFocus(); }
 // ---- pause menu
 function setPaused(on){
   if(state!=='play'||on===paused) return; paused=on; $('lockon').classList.add('hidden');
   MENU.prev=new Set([0,1,9]);          // a button still held from opening the menu isn't a new press
-  $('pause').classList.toggle('hidden',!on); if(!on){ $('quitConfirm').classList.add('hidden'); $('controlsPanel').classList.add('hidden'); }
+  $('pause').classList.toggle('hidden',!on); if(!on){ $('quitConfirm').classList.add('hidden'); $('controlsPanel').classList.add('hidden'); $('friendPanel').classList.add('hidden'); }
   if(AU.ctx){ if(on) AU.ctx.suspend(); else AU.ctx.resume(); }
   if(on){ saveRun(); try{ document.exitPointerLock(); }catch(e){}
-    $('pauseinfo').textContent=`${D.name} · ${tagSpots.filter(s=>s.done).length}/${tagSpots.length} · CITY ${tagsDone}/${TOTAL_TAGS} · ${fmtTime(runTime)}`; }
+    $('pfriends').classList.toggle('hidden',!(MP.live&&MP.peers.size)); $('pauseinfo').textContent=`${D.name} · ${tagSpots.filter(s=>s.done).length}/${tagSpots.length} · CITY ${tagsDone}/${TOTAL_TAGS} · ${fmtTime(runTime)}`; }
   MENU.screen=null; menuFocus();
 }
 $('presume').onclick=()=>{ setPaused(false); try{ const r=canvas.requestPointerLock(); if(r&&r.catch) r.catch(()=>{}); }catch(e){} };
@@ -3879,10 +3894,10 @@ function checkGates(){
   for(const g of GATES){ const rx=P.pos.x-g.p.x, rz=P.pos.z-g.p.z, depth=rx*g.o.x+rz*g.o.z, lat=rx*g.t.x+rz*g.t.z;
     if(depth>34&&depth<g.L&&Math.abs(lat)<g.w/2+0.5&&(P.vel.x*g.o.x+P.vel.z*g.o.z)>1&&!P.grind){ travelTo(g.to); return; } }
 }
-function travelTo(to){
+function travelTo(to,join){
   traveling=true; if(P.grind) endGrind(); bankCombo();
   tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0);
-  const payload={to,from:DKEY,t:Date.now(),eggActive,bossesBeaten,speed:Math.max(12,Math.hypot(P.vel.x,P.vel.z)),score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,flow:FLOW.v,bestCombo,stance:P.stance,heat};
+  const payload={to,from:DKEY,t:Date.now(),eggActive,bossesBeaten,speed:Math.max(12,Math.hypot(P.vel.x,P.vel.z)),score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,flow:FLOW.v,bestCombo,stance:P.stance,heat,join};
   try{ sessionStorage.setItem('jsr_travel',JSON.stringify(payload)); localStorage.setItem('inkline_district',to); }catch(e){}
   saveRun(to);
   $('tname').textContent=DISTRICTS[to].name; const tn=$('tunnel'); tn.classList.remove('hidden','tunnel-out'); tn.style.display='flex';
@@ -3892,7 +3907,7 @@ function travelTo(to){
 }
 function arriveFrom(tr){
   score=tr.score; bossesBeaten=tr.bossesBeaten||[]; if(tr.eggActive){ eggActive=true; spawnEgg(); } runTime=tr.runTime||0; tagsDone=tr.tagsDone; tagsByDistrict=tr.tagsByDistrict||{}; secrets=tr.secrets||[]; bestCombo=tr.bestCombo||0; heat=tr.heat||0;
-  P.cans=tr.cans; P.boost=tr.boost; FLOW.v=tr.flow||0; P.stance=tr.stance||1;
+  P.cans=tr.cans; P.boost=tr.boost; FLOW.v=tr.flow||0; P.stance=tr.stance||1; if(tr.join) FRIEND.want={...tr.join,until:performance.now()+20000};
   for(const i of tagsByDistrict[DKEY]||[]){ const t=tagSpots[i]; if(!t||t.done) continue; t.done=true; ensureDecal(t); t.decal.material.opacity=1; t.pop=1; t.frame.visible=false; t.arrow.visible=false; }
   if(secrets.includes(DKEY)){ golden.active=false; golden.m.visible=false; golden.t=1e9; }
   const g=tr.cont?null:(GATES.find(x=>x.to===tr.from)||GATES[0]);   // a continued save starts at the district spawn
@@ -4116,7 +4131,39 @@ function applyRemote(p,m){ const R=p.R; R.vel.set(...(m.v||[0,0,0])); R.facing=m
   if(m.gt){ const rail=p.rail??={pts:[new V3(),new V3()],cum:[0,1],seg:[1],len:1,radius:0.08}; rail.pts[1].set(...m.gt); rail.radius=m.gr||0.08; R.grind={r:rail,s:0.5,dir:1}; } else R.grind=null;
   R.wall=m.w?{n:{x:m.w[0],z:m.w[1]},t:{x:m.w[2],z:m.w[3]},up:!!m.w[4]}:null; R.qpAir=m.q?{r:{x:m.q[0],z:m.q[1]}}:null;
   if(m.tk){ if(!R.trick||R.trick.kind!==m.tk[0]||Math.abs(R.trick.t-m.tk[1])>0.25) R.trick={kind:m.tk[0],t:m.tk[1],dur:m.tk[2],sgn:m.tk[3],flip:!!m.tk[4]}; } else R.trick=null; }
-function mpTick(dt){ if(!MP.live) return;
+/* ---- FRIENDS: a bobbing marker over each crewmate (edge arrow when they're off screen) and fast travel to them from the pause menu */
+const FRIEND={want:null,cd:0,els:new Map()}; const _fv=new V3();
+function friendWhere(p){ const s=p.st; if(!s||!s.d) return '…'; if(s.d!==DKEY) return DISTRICTS[s.d]?.name||'ANOTHER DISTRICT';
+  const y=s.p[1], lv=y>=SKYY-2?'SKY':y>=MIDY-2?'MID':'STREET'; return Math.round(Math.hypot(s.p[0]-P.pos.x,s.p[2]-P.pos.z))+'M · '+lv; }
+function friendBlock(){ if(BOSS.active) return 'NOT DURING A BOSS FIGHT'; if(spotT>0) return 'LOSE THE COPS FIRST'; if(FRIEND.cd>performance.now()) return 'WAIT A FEW SECONDS'; return null; }
+function warpToPeer(p){ const s=p.st; if(!s||!s.p) return false; if(P.grind) endGrind(); if(P.wall) endWall&&endWall();
+  const f=s.f||0, bx=s.p[0]-Math.sin(f)*2.2, bz=s.p[2]-Math.cos(f)*2.2, y=s.p[1];
+  const ok=riderClear(bx,bz,y+0.3,0.5); P.pos.set(ok?bx:s.p[0],y+0.4,ok?bz:s.p[2]); P.vel.set(0,0,0); P.grounded=false; P.facing=f; cam.yaw=f+Math.PI;
+  P.checkpoint=P.pos.clone(); P.invuln=Math.max(P.invuln,2); camera.position.set(P.pos.x-Math.sin(f)*7,P.pos.y+3,P.pos.z-Math.cos(f)*7); cam.y=P.pos.y+1.5;
+  for(let i=0;i<14;i++) emit(P.pos,rv(4),0xd9e84b,0.5,0.15,0); popup('WITH '+p.name,'big'); blip(660,0.07,'triangle',0.1); blip(990,0.09,'triangle',0.08); return true; }
+function skateToFriend(id){ const p=MP.peers.get(id); if(!p||!p.st) return; const why=friendBlock(); if(why){ $('friendnote').textContent=why; blip(200,0.12,'square',0.08); return; }
+  FRIEND.cd=performance.now()+8000; $('friendPanel').classList.add('hidden'); setPaused(false); try{ const r=canvas.requestPointerLock(); if(r&&r.catch) r.catch(()=>{}); }catch(e){}
+  if(p.st.d===DKEY) warpToPeer(p); else travelTo(p.st.d,{id:p.id,name:p.name}); }
+function openFriends(){ const L=$('friendList'); L.innerHTML=''; $('friendnote').textContent=friendBlock()||'Fast travel right next to a crewmate, even in another district.';
+  for(const p of MP.peers.values()){ const b=document.createElement('button'); b.className='tool'; b.textContent=`${p.name} · ${friendWhere(p)}`; b.onclick=()=>skateToFriend(p.id); L.appendChild(b); }
+  if(!MP.peers.size) L.innerHTML='<div class="note">NOBODY ELSE IS ONLINE</div>';
+  $('pause').classList.add('hidden'); $('friendPanel').classList.remove('hidden'); MENU.screen=null; menuFocus(); }
+$('pfriends').onclick=openFriends;
+$('fback').onclick=()=>{ $('friendPanel').classList.add('hidden'); $('pause').classList.remove('hidden'); MENU.screen=null; menuFocus(); };
+function friendMarkers(){ const box=$('fmarks'), W=innerWidth, H=innerHeight, seen=new Set();
+  if(state==='play'&&!paused&&MP.live) for(const p of MP.peers.values()){ const s=p.st; if(!s||s.d!==DKEY||!s.p) continue; seen.add(p.id);
+    let el=FRIEND.els.get(p.id); if(!el){ el=document.createElement('div'); el.className='fm'; box.appendChild(el); FRIEND.els.set(p.id,el); }
+    _fv.copy(p.R.pos); _fv.y+=3.3; const d=Math.round(P.pos.distanceTo(p.R.pos)); _fv.project(camera);
+    const behind=_fv.z>1, onScr=!behind&&Math.abs(_fv.x)<0.96&&Math.abs(_fv.y)<0.92;
+    let x=(_fv.x*0.5+0.5)*W, y=(-_fv.y*0.5+0.5)*H, html;
+    if(onScr){ el.classList.remove('edge'); html=(d>18?`${p.name} · ${d}M`:'')+'<b>▼</b>'; }
+    else { if(behind){ x=W-x; y=H-y; } const cx=W/2, cy=H/2, dx=x-cx, dy=y-cy, k=Math.min((W/2-70)/Math.max(1e-3,Math.abs(dx)),(H/2-50)/Math.max(1e-3,Math.abs(dy)));
+      x=cx+dx*k; y=cy+dy*k; const a=Math.atan2(dy,dx); el.classList.add('edge'); html=`<b style="transform:rotate(${a}rad);display:inline-block">➤</b> ${p.name} · ${d}M`; }
+    if(el._h!==html){ el.innerHTML=html; el._h=html; } el.style.left=x+'px'; el.style.top=y+'px'; }
+  for(const [id,el] of FRIEND.els) if(!seen.has(id)){ el.remove(); FRIEND.els.delete(id); } }
+function friendArrive(){ const w=FRIEND.want; if(!w) return; if(performance.now()>w.until){ FRIEND.want=null; return; }
+  const p=MP.peers.get(w.id)||[...MP.peers.values()].find(q=>q.name===w.name); if(p&&p.st&&p.st.d===DKEY&&p.st.p&&state==='play'){ FRIEND.want=null; warpToPeer(p); } }
+function mpTick(dt){ friendMarkers(); if(!MP.live) return; friendArrive();
   if((MP.sendT-=dt)<=0&&state==='play'){ MP.sendT=SUPA?1/10:1/12; mpSend(myState()); }
   const k=Math.min(1,dt*12), tgt=new V3();
   for(const p of MP.peers.values()){ const s=p.st, vis=!!(s&&s.d===DKEY&&s.p&&state==='play'); p.g.visible=vis; if(p.rig) p.rig.root.visible=vis; if(!vis) continue;
