@@ -245,6 +245,7 @@
   <div class="logo" style="font-size:clamp(48px,9vw,80px)">PAUSED</div>
   <div class="sub" id="pauseinfo"></div>
   <button id="presume">RESUME</button>
+  <button id="psave" class="tool">SAVE GAME</button>
   <button id="pfriends" class="tool hidden">SKATE TO A FRIEND</button>
   <button id="pcontrols" class="tool">CONTROLS</button>
   <button id="pcam" class="tool">CAMERA: NORMAL</button>
@@ -3859,6 +3860,8 @@ function setPaused(on){
 }
 $('presume').onclick=()=>{ setPaused(false); try{ const r=canvas.requestPointerLock(); if(r&&r.catch) r.catch(()=>{}); }catch(e){} };
 $('pcontrols').onclick=()=>openControls(true);
+$('psave').onclick=()=>{ saveRun(); const ok=!!loadSave(); $('psave').textContent=ok?'SAVED ✓':'COULDN\'T SAVE'; blip(ok?1180:200,0.08,'triangle',0.08); setTimeout(()=>$('psave').textContent='SAVE GAME',1600); };
+addEventListener('pagehide',()=>saveRun()); document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveRun(); });   // closing the tab or the app keeps your progress
 $('pquit').onclick=()=>{ $('pause').classList.add('hidden'); $('quitConfirm').classList.remove('hidden'); MENU.screen=null; menuFocus(); };
 $('qno').onclick=()=>{ $('quitConfirm').classList.add('hidden'); $('pause').classList.remove('hidden'); MENU.screen=null; menuFocus(); };
 $('qyes').onclick=()=>{ try{ sessionStorage.removeItem('jsr_travel'); }catch(e){} location.reload(); };   // back to the title screen
@@ -3910,6 +3913,9 @@ function arriveFrom(tr){
   P.cans=tr.cans; P.boost=tr.boost; FLOW.v=tr.flow||0; P.stance=tr.stance||1; if(tr.join) FRIEND.want={...tr.join,until:performance.now()+20000};
   for(const i of tagsByDistrict[DKEY]||[]){ const t=tagSpots[i]; if(!t||t.done) continue; t.done=true; ensureDecal(t); t.decal.material.opacity=1; t.pop=1; t.frame.visible=false; t.arrow.visible=false; }
   if(secrets.includes(DKEY)){ golden.active=false; golden.m.visible=false; golden.t=1e9; }
+  if(tr.cont&&tr.hp>0) P.hp=tr.hp;
+  if(tr.cont&&tr.at&&tr.at.d===DKEY&&riderClear(tr.at.p[0],tr.at.p[2],tr.at.p[1]+0.3,0.5)){ const f=tr.at.f||0; P.pos.set(tr.at.p[0],tr.at.p[1]+0.2,tr.at.p[2]); P.checkpoint=P.pos.clone(); P.vel.set(0,0,0); P.facing=f; cam.yaw=f+Math.PI;
+    camera.position.set(P.pos.x-Math.sin(f)*7,P.pos.y+3,P.pos.z-Math.cos(f)*7); cam.y=P.pos.y+1.5; }   // pick up right where you saved
   const g=tr.cont?null:(GATES.find(x=>x.to===tr.from)||GATES[0]);   // a continued save starts at the district spawn
   const sp=Math.min(26,tr.speed||12);
   if(g){ P.pos.copy(g.p).addScaledVector(g.o,26); P.checkpoint=P.pos.clone(); P.pos.y=0; P.vel.set(g.n.x*sp,0,g.n.z*sp); P.facing=Math.atan2(g.n.x,g.n.z); cam.yaw=Math.atan2(-g.n.x,-g.n.z); P.grounded=true;
@@ -3974,7 +3980,9 @@ function endGame(win){
   if(isBest){ try{ localStorage.setItem(bestKey,JSON.stringify({score,rank})); }catch(e){} }
   $('endstats').innerHTML=`${D.name}<br>CREW: ${crew}<br>SCORE: ${score.toLocaleString()}<br>TAGS: ${tagsDone}/${TOTAL_TAGS}<br>BEST COMBO: ${bestCombo.toLocaleString()}<br>PEAK FLOW: ${FLOW.names[FLOW.peak]}${secretFound?`<br>SECRET: ${D.secretName}`:''}<br>TIME: ${fmtTime(runTime)}`;
 }
-$('start').onclick=()=>startGame();
+$('start').onclick=()=>{ const b=$('start');
+  if(loadSave()&&!b.dataset.sure){ b.dataset.sure='1'; b.textContent='NEW RUN? YOUR SAVE WILL BE REPLACED · PRESS AGAIN'; blip(300,0.1,'square',0.06); setTimeout(()=>{ delete b.dataset.sure; b.textContent='SKATE!'; },3500); return; }
+  delete b.dataset.sure; startGame(); };
 function refreshLevelBtn(){ const b=$('levelbtn'); b.classList.toggle('hidden',!UNLOCK.afterHours); b.textContent='LEVEL: '+(AFTER()?'AFTER HOURS':'STORY'); }
 $('levelbtn').onclick=()=>{ LEVEL=AFTER()?'story':'after'; try{ localStorage.setItem('inkline_level',LEVEL); }catch(e){} refreshLevelBtn(); if(AFTER()&&tod!=='night') applyTOD('night'); blip(880,0.06,'square',0.06); };
 $('afterbtn').onclick=()=>{ LEVEL='after'; try{ localStorage.setItem('inkline_level','after'); localStorage.removeItem('inkline_save'); }catch(e){} location.reload(); };
@@ -3984,12 +3992,12 @@ refreshLevelBtn(); if(AFTER()&&tod!=='night') applyTOD('night');
 const SAVE_KEY='inkline_save';
 function saveRun(district=DKEY){ if(state!=='play'||winTimer>0) return;
   try{ tagsByDistrict[DKEY]=tagSpots.map((t,i)=>t.done?i:-1).filter(i=>i>=0);
-    localStorage.setItem(SAVE_KEY,JSON.stringify({district,eggActive,level:LEVEL,bossesBeaten,score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,bestCombo,heat,crew,saved:Date.now()})); }catch(e){} }
+    localStorage.setItem(SAVE_KEY,JSON.stringify({district,eggActive,level:LEVEL,bossesBeaten,score,runTime,tagsDone,tagsByDistrict,secrets,cans:P.cans,boost:P.boost,bestCombo,heat,crew,hp:Math.round(P.hp),at:district===DKEY&&P.grounded&&!P.grind&&P.knock<=0?{d:DKEY,p:[+P.pos.x.toFixed(2),+P.pos.y.toFixed(2),+P.pos.z.toFixed(2)],f:+P.facing.toFixed(2)}:(loadSave()||{}).at||null,saved:Date.now()})); }catch(e){} }
 function loadSave(){ try{ const v=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); return v&&DISTRICTS[v.district]?v:null; }catch(e){ return null; } }
 function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
 { const sv=loadSave(); if(sv){ const b=$('continue'); b.classList.remove('hidden');
     b.textContent=`CONTINUE · ${DISTRICTS[sv.district].name} · ${sv.tagsDone}/${TOTAL_TAGS} TAGS · ${fmtTime(sv.runTime||0)}`;
-    b.onclick=()=>{ const tr={...sv,to:sv.district,from:null,cont:true,t:Date.now(),flow:0,stance:1,speed:0}; if(sv.crew) $('crew').value=sv.crew;
+    b.onclick=()=>{ const tr={...sv,to:sv.district,from:null,cont:true,t:Date.now(),flow:0,stance:1,speed:0}; if(sv.crew&&!localStorage.getItem('inkline_crew')) $('crew').value=sv.crew;
       try{ sessionStorage.setItem('jsr_travel',JSON.stringify(tr)); localStorage.setItem('inkline_district',sv.district); }catch(e){}
       if(sv.district===DKEY){ startGame(tr); setTimeout(finishArrival,120); } else { location.hash=sv.district; location.reload(); } }; } }
 
@@ -4007,6 +4015,8 @@ async function supaLogin(code,name){ const c=await sbClient(); let {data:{sessio
   const {data,error}=await c.rpc('redeem_code',{p_code:normCode(code),p_name:name}); if(error) throw new Error('RPC:'+error.message); if(!data) throw new Error('BADCODE');
   try{ localStorage.setItem('inkline_code',normCode(code)); }catch(e){} return session.user.id; }
 const loginError=e=>{ const m=String(e&&e.message||e); if(/fetch|network|load failed/i.test(m)) return 'COULDN\'T REACH THE SERVER'; return m==='BADCODE'?'THAT ACCESS CODE ISN\'T VALID':m.startsWith('SIGNIN')?'SIGN-IN IS OFF ON THE SERVER (ENABLE ANONYMOUS SIGN-INS)':m.startsWith('RPC')?'SERVER NOT SET UP YET (RUN setup.sql)':'COULDN\'T REACH THE SERVER'; };
+$('crew').addEventListener('input',()=>{ const v=$('crew').value.toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8); if(v!==$('crew').value) $('crew').value=v; if(v){ crew=v; try{ localStorage.setItem('inkline_crew',v); }catch(e){} }
+  if(MP.live&&MP.ch&&v) MP.ch.track({name:v,c:CHAR}).catch(()=>{}); });
 const crewName=()=>(($('crew').value||'NOVA').toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8)||'NOVA');
 function mpURL(){ const u=$('mpserver').value.trim(), sec=location.protocol==='https:';
   if(u) return /^wss?:\/\//i.test(u)?u:(sec||/^https:/i.test(u)?'wss://':'ws://')+u.replace(/^https?:\/\//i,'').replace(/\/+$/,'')+'/mp';
@@ -4060,7 +4070,7 @@ function mpHandle(m){
   else if(m.t==='full'){ MP.want=false; mpStatus('THAT ROOM IS FULL (8 MAX)'); }
   else if(m.t==='join'){ addPeer(m.id,m.name,null); popup(`${m.name} JOINED`); refreshMpUI(); }
   else if(m.t==='leave'){ const p=MP.peers.get(m.id); if(p){ popup(`${p.name} LEFT`); removePeer(p); refreshMpUI(); } }
-  else if(m.t==='st'){ const p=MP.peers.get(m.id); if(!p) return; const moved=!p.st||p.st.d!==m.d; p.st=m; if(m.c&&m.c!==p.char) dressPeer(p); applyRemote(p,m); if(moved){ if(m.d===DKEY) p.g.position.set(...m.p); refreshMpUI(); } }
+  else if(m.t==='st'){ const p=MP.peers.get(m.id); if(!p) return; if(typeof m.n==='string'){ const n=m.n.toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8); if(n&&n!==p.name){ p.name=n; p.tagLabel=null; setItTag(); refreshMpUI(); } } const moved=!p.st||p.st.d!==m.d; p.st=m; if(m.c&&m.c!==p.char) dressPeer(p); applyRemote(p,m); if(moved){ if(m.d===DKEY) p.g.position.set(...m.p); refreshMpUI(); } }
   else if(m.t==='tag') applyCrewTag(m.d,m.i,m.name);
   else if(m.t==='pol'){ const p=MP.peers.get(m.id); if(p&&p.st&&p.st.d===DKEY) POLSNAP=m; }
   else if(m.t==='hit'){ if(m.to===MP.id&&state==='play'){ const can=P.invuln<=0&&P.knock<=0; hurt(m.n,m.why); if(can&&m.push){ if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(...m.push); } } }
@@ -4120,7 +4130,7 @@ function addPeer(id,name,st){ if(id===MP.id||MP.peers.has(id)) return; const g=n
 function removePeer(p){ scene.remove(p.g); if(p.rig) scene.remove(p.rig.root); MP.peers.delete(p.id); }
 function clearPeers(){ for(const p of [...MP.peers.values()]) removePeer(p); refreshMpUI(); }
 // what each player sends ~10x/s: enough for the animator to rebuild the pose on the other end
-function myState(){ const m={t:'st',d:DKEY,p:[+P.pos.x.toFixed(2),+P.pos.y.toFixed(2),+P.pos.z.toFixed(2)],f:+P.facing.toFixed(2),c:CHAR,
+function myState(){ const m={t:'st',n:crewName(),d:DKEY,p:[+P.pos.x.toFixed(2),+P.pos.y.toFixed(2),+P.pos.z.toFixed(2)],f:+P.facing.toFixed(2),c:CHAR,
     v:[+P.vel.x.toFixed(1),+P.vel.y.toFixed(1),+P.vel.z.toFixed(1)],g:P.grounded?1:0,sn:P.stance,kn:P.knock>0?1:0,sl:+(P.slideAmt||0).toFixed(2),ss:P.slideSide||1,m:P.grind?2:P.wall?3:!P.grounded?1:P.sliding?4:0};
   if(P.grind){ const T=railTan(P.grind.r,P.grind.s,new V3()).multiplyScalar(P.grind.dir); m.gt=[+T.x.toFixed(2),+T.y.toFixed(2),+T.z.toFixed(2)]; m.gr=P.grind.r.radius||0.08; }
   if(P.wall) m.w=[P.wall.n.x,P.wall.n.z,P.wall.t.x,P.wall.t.z,P.wall.up?1:0];
