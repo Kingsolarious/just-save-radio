@@ -3201,12 +3201,15 @@ function moveHoriz(h){
   p.x=clamp(nx,-225,225); p.z=clamp(nz,-225,225);
 }
 function land(g){
+  const fallV=P.vel.y;
   P.squash=P.airTime>1?-0.3:-0.18; P.flipRail=null;
+  if(g.s&&g.s.type==='ramp'&&!P.qpAir&&fallV<-2){ const gr=rampGrad(g.s,P.pos.x,P.pos.z), gm=Math.hypot(gr.x,gr.z); if(gm>0.05){ const dx=-gr.x/gm, dz=-gr.z/gm, hs0=Math.hypot(P.vel.x,P.vel.z), down=hs0>0.5?(P.vel.x*dx+P.vel.z*dz)/hs0:0;
+    const gain=-fallV*(gm/Math.sqrt(1+gm*gm))*0.75*Math.abs(down); P.vel.x+=dx*Math.abs(gain); P.vel.z+=dz*Math.abs(gain); if(down>0.5&&gain>3){ P.squash=-0.14; trick('Transition',60); } } }   // land in the tranny: the fall becomes speed
   P.pos.y=g.h; P.vel.y=0; P.grounded=true; P.gs=g.s; P.groundVy=0; P.dashUsed=false; P.wallRunUsed=false;
   if(P.padT>0){ P.vel.x*=0.12; P.vel.z*=0.12; P.padT=0; }   // vent flights land soft, so small decks and roofs hold you
   const perfect=P.landWin>0&&P.airTime>0.35; P.landWin=0; P.landTried=false;
   if(P.trick){ if(P.trick.t/P.trick.dur<0.8&&!P.qpAir){ bail(); return; } finishTrick(); }   // vert air (halfpipes) is always forgiving
-  if(P.qpAir){ const r=P.qpAir.r, sp=Math.max(P.qpAir.speed*0.9,7); P.vel.x-=r.x*sp; P.vel.z-=r.z*sp; P.qpAir=null; }
+  if(P.qpAir){ const r=P.qpAir.r, sp=Math.max(P.qpAir.speed,7); P.vel.x-=r.x*sp; P.vel.z-=r.z*sp; P.qpAir=null; P.squash=-0.12; }   // drop back in at the speed you went up with
   if(P.airTime>1.1) trick('Big Air',Math.round(P.airTime*90));
   if(perfect){ rumble(0.25,0.8,120); trick('Perfect Landing',120); const hs=Math.hypot(P.vel.x,P.vel.z); if(hs>1){ const k=(hs+3)/hs; P.vel.x*=k; P.vel.z*=k; } sfx.perfect();
     for(let i=0;i<16;i++){ const a=i/16*Math.PI*2; emit(P.pos.clone().add(new V3(0,0.15,0)),new V3(Math.cos(a)*6,0.5,Math.sin(a)*6),0xd9e84b,0.4,0.18,0); } }
@@ -3289,15 +3292,18 @@ function trySnapWall(fromGround=false){
     const sg=Math.sign(along); startWall(s,{x:Math.round(nx),z:Math.round(nz)},{x:Math.round(tx)*sg,z:Math.round(tz)*sg},Math.max(Math.abs(along),10)); return; }
 }
 function startWall(s,n,t,speed,upV){
+  const _from=P.pos.clone();
   if(n.x) P.pos.x=(n.x>0?s.x1:s.x0)+n.x*(CFG.R+0.05); else P.pos.z=(n.z>0?s.z1:s.z0)+n.z*(CFG.R+0.05);
+  (P.snapOff??=new V3()).add(_from.sub(P.pos)).clampLength(0,1.5);   // ease the body onto the wall instead of teleporting
   P.wall={s,n,t,speed,time:0,up:upV!==undefined,y0:P.pos.y}; if(upV!==undefined) P.wallRunUsed=true; P.vel.y=upV!==undefined?upV:Math.max(P.vel.y*0.3,2.5); if(upV!==undefined){ P.grounded=false; P.gs=null; } if(P.trick) finishTrick(); P.qpAir=null; P.dashUsed=false; P.landTried=false; P.landWin=0;
   if(clock-P.lastGrindEnd<0.9) trick('Rail to Wall',180); else if(clock-P.lastWallEnd<0.9&&s!==P.lastWall) trick('Wall Transfer',150);
   trick(upV!==undefined?'Wall Run':'Wall Ride',90); flowAdd(6); sfx.wall();
 }
 function mantle(){   // reached the top edge with momentum: pop up and over onto the roof
-  const w=P.wall, s=w.s, p=P.pos; endWall();
+  const w=P.wall, s=w.s, p=P.pos, _from=p.clone(); endWall();
   if(w.n.x) p.x=(w.n.x>0?s.x1:s.x0)-w.n.x*0.9; else p.z=(w.n.z>0?s.z1:s.z0)-w.n.z*0.9;
   p.y=s.top+0.05; const fw=w.up?7:w.speed*0.8; P.vel.set(w.up?-w.n.x*fw:w.t.x*fw-w.n.x*2,2.5,w.up?-w.n.z*fw:w.t.z*fw-w.n.z*2);
+  (P.snapOff??=new V3()).add(_from.sub(p)).clampLength(0,2);   // roll up and over the lip rather than popping onto the roof
   P.grounded=false; P.noWall=0.5; trick('Wall Climb',160); flowAdd(8); rumble(0.3,0.5,140); sfx.jump();
 }
 function endWall(){ P.lastWall=P.wall.s; P.wall=null; P.noWall=0.4; P.lastWallEnd=clock; P.airTime=0; }
@@ -3363,7 +3369,7 @@ function physics(h,inp,first){
       } else if(P.padT>0){ /* vent flight holds its line */ }
       else if(hs>0.5){ const cur=Math.atan2(v.x,v.z), d=angDiff(cur,tgt), na=cur+clamp(d,-1.8*h,1.8*h); v.x=Math.sin(na)*hs; v.z=Math.cos(na)*hs; }
       else { v.x+=inp.x*5*h; v.z+=inp.z*5*h; hs=Math.hypot(v.x,v.z); }
-    } else if(P.grounded){ hs=Math.max(0,hs-4*h); P.turn*=0.9; }
+    } else if(P.grounded){ hs=Math.max(0,hs-(hs>7?1.2:hs>3?2.5:4)*h); P.turn*=0.9; }   // blades roll: coast through transitions, settle to a stop slowly
     if(drifting){ hs=Math.max(0,hs-2.5*h); P.driftT+=h; if(Math.random()<0.5) emit(p.clone().add(new V3(0,0.1,0)),rv(2).setY(1),0xe8e1c7,0.35,0.16,2); }
     else if(P.driftT>0){ if(P.driftT>0.6) trick('Drift',Math.round(40+P.driftT*40)); P.driftT=0; }
     if(sliding){ hs=Math.max(0,hs-(hs>8?12:16)*h); P.slideT=(P.slideT||0)+h;
@@ -3432,7 +3438,7 @@ function padCheck(){   // updraft vents: pop straight up to the next level, keep
 function qpCheck(){
   const s=P.gs; if(!s||!s.qp) return; const v=P.vel;
   const t=rampT(s,P.pos.x,P.pos.z), r=s.r, along=v.x*r.x+v.z*r.z;
-  if(t>0.9&&along>3){ v.y=along*1.0+4; v.x-=r.x*along; v.z-=r.z*along; P.grounded=false; P.gs=null; P.qpAir={r,speed:along}; P.airTime=0; P.noGrind=v.y/CFG.G*2+0.3; trick('Vert Air',100); }
+  if(t>0.9&&along>3){ const gr=rampGrad(s,P.pos.x,P.pos.z); v.y=Math.max(along*1.0+4,P.groundVy||0); v.x-=r.x*along; v.z-=r.z*along; P.grounded=false; P.gs=null; P.qpAir={r,speed:along,n:new V3(-gr.x,1,-gr.z).normalize()}; P.airTime=0; P.noGrind=v.y/CFG.G*2+0.3; trick('Vert Air',100); }
 }
 
 // ====================================================================== TRICKS (TrickSystem) + ABILITY
@@ -3583,19 +3589,20 @@ function updateSkater(dt){ P.inJump=held('jump'); P.inDrift=held('drift'); P.inB
 // the full animator, for any rig + movement state (remote crew run through it too)
 function updateSkaterFor(dt,SK,P,isLocal){
   const r=SK, hs=Math.hypot(P.vel.x,P.vel.z);
-  r.root.position.copy(P.pos); if(P.snapOff){ r.root.position.add(P.snapOff); P.snapOff.multiplyScalar(Math.exp(-dt*14)); } P.railLift=lerp(P.railLift||0,P.grind?(P.grind.r.radius||0.08):0,Math.min(1,dt*20)); r.root.position.y+=P.railLift;
+  r.root.position.copy(P.pos); if(P.snapOff){ r.root.position.add(P.snapOff); P.snapOff.multiplyScalar(Math.exp(-dt*11)); } P.railLift=lerp(P.railLift||0,P.grind?(P.grind.r.radius||0.08):0,Math.min(1,dt*20)); r.root.position.y+=P.railLift;
   let tf=P.facing;
   if(P.grind){ const T=railTan(P.grind.r,P.grind.s,tmp); tf=Math.atan2(T.x*P.grind.dir,T.z*P.grind.dir); }
   else if(P.wall) tf=P.wall.up?Math.atan2(-P.wall.n.x,-P.wall.n.z):Math.atan2(P.wall.t.x,P.wall.t.z);
-  else if(P.qpAir) tf=Math.atan2(-P.qpAir.r.x,-P.qpAir.r.z);
+  else if(P.qpAir) tf=P.vel.y>1.5?Math.atan2(P.qpAir.r.x,P.qpAir.r.z):Math.atan2(-P.qpAir.r.x,-P.qpAir.r.z);   // ride up facing the lip, turn round at the peak, drop back in
   else if(hs>0.6&&P.knock<=0) tf=Math.atan2(P.vel.x,P.vel.z);
   P.slideAmt=lerp(P.slideAmt||0,P.sliding&&P.grounded&&!P.grind?1:0,Math.min(1,dt*12));
-  P.facing+=angDiff(P.facing,tf)*Math.min(1,dt*(P.qpAir?4:14));
+  P.facing+=angDiff(P.facing,tf)*Math.min(1,dt*(P.qpAir?7:P.wall?9:14));
   // lean the whole skater into the surface he's riding (quarter pipes up to ~55 deg); ease back upright in the air
   _nv.set(0,1,0);
-  if(P.grounded&&!P.grind&&P.gs&&P.gs.type==='ramp'){ const gr=rampGrad(P.gs,P.pos.x,P.pos.z); _nv.set(-gr.x,1,-gr.z).normalize(); }
+  if(P.grounded&&!P.grind&&P.gs&&P.gs.type==='ramp'){ const gr=rampGrad(P.gs,P.pos.x,P.pos.z); _nv.set(-gr.x*0.85,1,-gr.z*0.85).normalize(); }
   if(P.wall&&P.wall.up) _nv.set(P.wall.n.x,0.35,P.wall.n.z).normalize();
-  P.tiltV??=new V3(0,1,0); P.tiltV.lerp(_nv,Math.min(1,dt*(P.grounded||P.wall?16:P.qpAir?2.5:5))).normalize();
+  if(P.qpAir&&P.qpAir.n&&!P.trick) _nv.copy(P.qpAir.n);   // stay lined up with the transition through vert air
+  P.tiltV??=new V3(0,1,0); P.tiltV.lerp(_nv,Math.min(1,dt*(P.grounded?14:P.wall?9:P.qpAir?6:4))).normalize();
   _qt.setFromUnitVectors(_UP,P.tiltV); _qy.setFromAxisAngle(_UP,P.facing+(P.slideSide||1)*1.25*P.slideAmt); r.root.quaternion.copy(_qt).multiply(_qy);
   P.squash=lerp(P.squash,0,Math.min(1,dt*9)); r.root.scale.set(1-P.squash*0.45,1+P.squash,1-P.squash*0.45);
   // crouch 0..1 drives hip height; 2-bone IK below keeps the skates planted under the hips
@@ -3661,7 +3668,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   r.aL.rotation.z=lerp(r.aL.rotation.z,-armsOut*1.3-0.1,dt*10); r.aR.rotation.z=lerp(r.aR.rotation.z,armsOut*1.3+0.1,dt*10);
   if(P.inJump&&P.grounded&&!P.grind&&r.crouchK){ r.aL.rotation.x=r.aR.rotation.x=0.85; }   // wind-up: arms swing back as the knees load
   if(GEST.active){ r.aR.rotation.x=-1.4; r.aR.rotation.z=0.3; }
-  const lk=r.leanK||1, leanX=(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk, leanY=P.grind?0.22*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
+  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?0.22*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
   let by=r.upper?0:leanY, bx=r.upper?0:leanX;
   if(P.trick){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2), sg=P.trick.sgn, PI2=Math.PI*2;
     switch(P.trick.kind){
