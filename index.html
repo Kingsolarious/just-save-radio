@@ -2684,7 +2684,7 @@ function crewHere(){ return MP.live?[...MP.peers.values()].filter(p=>p.st&&p.st.
 function crewTargets(){ const T=[{id:MP.id||'me',local:true,pos:P.pos,vel:P.vel,grind:!!P.grind,air:!P.grounded&&!P.grind}];
   for(const p of crewHere()) T.push({id:p.id,local:false,pos:p.R.pos,vel:p.R.vel,grind:!!p.R.grind,air:!p.R.grounded&&!p.R.grind,name:p.name}); return T; }
 function policeHost(){ const ids=[MP.id,...crewHere().map(p=>p.id)].filter(Boolean); return !MP.live||ids.length<2||String(MP.id)===ids.map(String).sort()[0]; }   // lowest id in the district runs the cops
-function hitTarget(T,n,why,push){ if(T.local){ hurt(n,why); if(push){ if(P.grind) endGrind(); bail(); P.invuln=1.6; P.vel.set(push[0],push[1],push[2]); } } else mpSend({t:'hit',to:T.id,n,why,push}); }
+function hitTarget(T,n,why,push){ if(T.local){ hurt(n,why); if(push){ if(P.grind) endGrind(); bail(); P.invuln=2.6; P.vel.set(push[0],push[1],push[2]); } } else mpSend({t:'hit',to:T.id,n,why,push}); }
 const COP_CLIMB=1.8, COP_CLIMB_SKY=4.5;
 /* where a cop should start climbing to reach the deck/roof under point K: the nearest edge with a clear wall face below it.
    No clear face straight up from where they stand (a deck overhead in the way)? climb onto the Mid Floor first. */
@@ -2699,33 +2699,42 @@ function copClimbPoint(c,K){ const topOf=s=>s.type==='ramp'?null:s.top;
   if(c.y<MIDY-1&&K.y>MIDY+2){ const mids=solids.filter(s=>s.floor&&s.type==='box'&&Math.abs(s.top-MIDY)<0.1).sort((a,b)=>Math.hypot((a.x0+a.x1)/2-c.pos.x,(a.z0+a.z1)/2-c.pos.z)-Math.hypot((b.x0+b.x1)/2-c.pos.x,(b.z0+b.z1)/2-c.pos.z));
     for(const M of mids.slice(0,6)){ cp=tryS(M); if(cp) return cp; } }
   return null; }
-function copSees(c,T=crewTargets()[0]){ const PP=T.pos, dx=PP.x-c.pos.x, dz=PP.z-c.pos.z, d=Math.hypot(dx,dz); if(d>38||PP.y-c.y>7) return false;
+function copSees(c,T=crewTargets()[0]){ const PP=T.pos, dx=PP.x-c.pos.x, dz=PP.z-c.pos.z, d=Math.hypot(dx,dz); if(d>55||PP.y-c.y>7) return false;
   const fwd=Math.sin(c.yaw)*dx/d+Math.cos(c.yaw)*dz/d; if(d>8&&fwd<-0.2) return false;                            // can't see behind unless close
   return eyeLine(c.pos.clone().setY(c.y+1.8),PP.clone().setY(PP.y+1.2)); }
 function hurt(n,why){ if(P.invuln>0||state!=='play') return; P.hp=Math.max(0,P.hp-n); P.hurtT=0; rumble(0.6,0.9,180); $('hurt').style.opacity=1; setTimeout(()=>$('hurt').style.opacity=0,180);
   blip(140,0.12,'sawtooth',0.12,70); if(why) popup(why,'bad'); if(P.hp<=0) busted(); }
-function busted(){ message('BUSTED!<br><span style="font-size:22px">BACK TO YOUR LAST CHECKPOINT</span>',2.4); sfx.alarm&&sfx.alarm();
+function busted(){ message('BUSTED!<br><span style="font-size:22px">BACK TO THE CENTER OF TOWN</span>',2.4); sfx.alarm&&sfx.alarm();
   const crew=MP.live&&crewHere().length>0;
   if(P.grind) endGrind(); if(P.wall) endWall(); dropCombo(); P.cans=Math.max(0,P.cans-3); if(!crew){ heat=0; evadeT=0; lastKnown=null; clearPolice(); } else lastKnown=null;   // in a crew the chase goes on for your friends
-  const wasBoss=BOSS.active&&!crew; const cp=(wasBoss&&P.bossCp)||P.checkpoint||new V3(...D.spawn); P.pos.copy(cp); if(wasBoss) bossReset(); P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.hp=100; P.invuln=3; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); saveRun(); }
+  const wasBoss=BOSS.active&&!crew; const cp=centerSpawn(); P.pos.copy(cp); P.checkpoint=cp.clone(); if(wasBoss) bossReset(); P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.hp=100; P.invuln=3; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); saveRun(); }
+let _cSpawn=null; function centerSpawn(){   /* the clear street spot nearest the middle of the map, off the roads */
+  if(!_cSpawn){ const onRoad=(x,z)=>ROADS.some(R=>R.axis==='x'?Math.abs(z-R.c)<RW+0.5&&x>R.a0&&x<R.a1:Math.abs(x-R.c)<RW+0.5&&z>R.a0&&z<R.a1);
+    for(let k=0;k<1500&&!_cSpawn;k++){ const a=k*2.399, r=Math.sqrt(k)*1.6, x=Math.cos(a)*r, z=Math.sin(a)*r;
+      if(Math.abs(ground(x,z,1).h)<0.05&&riderClear(x,z,0.3,0.9)&&!onRoad(x,z)) _cSpawn=new V3(x,0,z); }
+    _cSpawn??=new V3(...D.spawn); }
+  return _cSpawn.clone(); }
 function clearPolice(){ for(const c of COPS) scene.remove(c.g); COPS.length=0; for(const d of PDRONES) scene.remove(d.g); PDRONES.length=0; }
 function shoot(c,T=c.tg||crewTargets()[0]){ const from=c.pos.clone().setY(c.y+1.45), to=T.pos.clone().setY(T.pos.y+1.1), hs=Math.hypot(T.vel.x,T.vel.z), d=from.distanceTo(to);
-  let chance=0.72-hs*0.024-(T.grind?0.14:0)-(T.air?0.12:0); if(d<10) chance+=0.12; chance=clamp(chance,0.12,0.75);
+  let chance=0.6-hs*0.026-(T.grind?0.14:0)-(T.air?0.12:0); if(d<10) chance+=0.08; chance=clamp(chance,0.1,0.6);
   const hit=Math.random()<chance; if(!hit) to.add(rv(3.5));
   const tr=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1,4),new THREE.MeshBasicMaterial({color:0xfff2a8,transparent:true,opacity:0.9})); tr.position.copy(from).lerp(to,0.5); tr.scale.y=d; tr.quaternion.setFromUnitVectors(_UP,to.clone().sub(from).normalize()); scene.add(tr);
   setTimeout(()=>{ scene.remove(tr); tr.geometry.dispose(); },70); c.flash.visible=true; c.flashT=0.06;
   if(AU.ctx){ noiseHit(0.09,3200,0.3,'bandpass'); blip(180,0.06,'square',0.06,60); }
-  if(hit) hitTarget(T,11,'HIT!'); }
+  if(hit) hitTarget(T,5,'HIT!'); }
 function launchDrone(c){ const d=makeDrone(); d.pos.copy(c.pos).setY(c.y+2.2); d.g.position.copy(d.pos); d.life=8; d.daze=0; d.target=lastKnown?lastKnown.clone():P.pos.clone(); d.alerted=false; PDRONES.push(d); blip(900,0.08,'square',0.05,1400); }
 function sprayBurst(){   // paint shot: dazes cops/drones in a cone in front of you
   if(P.cans<1||(P.sprayCd||0)>0||P.knock>0) return; P.sprayCd=0.45; P.cans-=1;
-  const f=new V3(Math.sin(P.facing),0,Math.cos(P.facing)), o=P.pos.clone().setY(P.pos.y+1.3);
+  const o=P.pos.clone().setY(P.pos.y+1.3); let f=new V3(Math.sin(P.facing),0,Math.cos(P.facing));
+  { let best=null, bd=12; for(const c of COPS){ if(c.daze>0&&!c.kind) continue; const d=Math.hypot(c.pos.x-o.x,c.pos.z-o.z); if(d<bd&&Math.abs(c.y+1.4-o.y)<4){ bd=d; best=new V3(c.pos.x-o.x,0,c.pos.z-o.z); } }
+    for(const d of PDRONES){ if(d.daze>0) continue; const L=d.pos.distanceTo(o); if(L<bd){ bd=L; best=d.pos.clone().sub(o).setY(0); } }
+    if(best&&best.lengthSq()>0.01) f=best.normalize(); }   /* paint shots lock onto the closest cop or drone, even one right behind you */
   for(let i=0;i<26;i++) emit(o.clone(),f.clone().multiplyScalar(13+Math.random()*6).add(rv(5)),[0xff3d8b,0x3fd4ff,0xd9e84b][i%3],0.5,0.3,2);
   noiseHit(0.25,5200,0.18,'highpass');
   if(!policeHost()){ mpSend({t:'spray',o:[+o.x.toFixed(2),+o.y.toFixed(2),+o.z.toFixed(2)],f:+P.facing.toFixed(2)}); return; }
   sprayAt(o,f,true); }
 function sprayAt(o,f,mine){ let hits=0;
-  const inCone=p=>{ const d=p.clone().sub(o); const L=d.length(); if(L>8) return false; d.y*=0.5; return d.normalize().dot(f)>0.62; };
+  const inCone=p=>{ const d=p.clone().sub(o); const L=d.length(); if(L>12) return false; if(L<2.2) return true; d.y*=0.35; return d.normalize().dot(f)>0.5; };
   for(const c of COPS){ if(!inCone(c.pos.clone().setY(c.y+1.5*(c.kind==='boss'?1.55:1)))) continue; hits++;
     if(c.kind){ if(c.daze>0) bossDamage(c,1,'PAINTED'); else if(c.kind==='minion'){ c.daze=4; popup('STUNNED!'); } else if(c.kind==='boss'&&BOSS.active&&(BOSS.wave<BOSS.waves||BOSS.minions>0)) popup('SHIELDED · TAKE OUT THE SQUAD FIRST','bad'); else { c.armor--; popup(c.armor>0?`ARMOR ${c.armor}`:'ARMOR CRACKED!','big'); if(c.armor<=0){ c.daze=4.5; c.armor=3; } } }
     else if(c.daze<=0){ c.daze=5+Math.random()*5; c.see=false; c.wander=null; } }
@@ -2824,7 +2833,7 @@ function updatePolice(dt){
     if(c.see){ seen=true; lastKnown=c.tg.pos.clone(); }
     if(c.kind){ c.leave=false; if(c.kind==='boss'){ c.chargeCd-=dt; c.callCd-=dt;
         if(c.charge>0){ c.charge-=dt; const cd=new V3(Math.sin(c.yaw),0,Math.cos(c.yaw)); const nx=c.pos.x+cd.x*17*dt, nz=c.pos.z+cd.z*17*dt; if(!blocked(nx,nz,c.y)){ c.pos.x=nx; c.pos.z=nz; } else c.charge=0; g.position.set(c.pos.x,c.y,c.pos.z);
-          if(dist<1.9&&Math.abs(TP.y-c.y)<2&&!(T.local&&(P.invuln>0||P.knock>0))&&!(c.hitCd>clock)){ c.hitCd=clock+1.5; hitTarget(T,26,'BODY SLAMMED!',[dx/dist*10,6,dz/dist*10]); c.charge=0; } continue; }
+          if(dist<1.9&&Math.abs(TP.y-c.y)<2&&!(T.local&&(P.invuln>0||P.knock>0))&&!(c.hitCd>clock)){ c.hitCd=clock+1.5; hitTarget(T,18,'BODY SLAMMED!',[dx/dist*10,6,dz/dist*10]); c.charge=0; } continue; }
         if(c.see&&dist<16&&dist>4&&c.chargeCd<=0){ c.chargeCd=6+Math.random()*3; c.charge=0.75; c.yaw=Math.atan2(dx,dz); popup('INCOMING!','bad'); blip(120,0.3,'sawtooth',0.1,60); continue; }
         if(c.callCd<=0&&PDRONES.length<3){ c.callCd=14; lastKnown=TP.clone(); launchDrone(c); } } }
     if(c.climb){ const k=c.climb; c.y=Math.min(k.top,c.y+(k.v||COP_CLIMB)*dt); g.position.set(c.pos.x,c.y,c.pos.z); g.rotation.y=c.yaw=k.yaw;   /* scaling a wall: slow, hand over hand */
@@ -2837,6 +2846,7 @@ function updatePolice(dt){
       if(c.cp){ const ex=c.cp.x-c.pos.x, ez=c.cp.z-c.pos.z; if(Math.hypot(ex,ez)<0.9&&Math.abs(c.y-c.cp.base)<1.5){ c.pos.x=c.cp.x; c.pos.z=c.cp.z; c.climb={top:c.cp.top,ix:c.cp.ix,iz:c.cp.iz,yaw:Math.atan2(c.cp.ix,c.cp.iz),v:lastKnown.y>=SKYY-6?COP_CLIMB_SKY:COP_CLIMB};   /* chasing you up to the Sky Floor they climb much faster */ c.see=false;
           if(alertMsgT<=0&&T.local){ alertMsgT=8; popup('COPS ARE CLIMBING UP!','bad'); } continue; } } }
     else if(c.cp) c.cp=null;
+    if(c.recover>0){ c.recover-=dt; const bx=-dx/dist*3.2*dt, bz=-dz/dist*3.2*dt; if(!blocked(c.pos.x+bx,c.pos.z+bz,c.y)){ c.pos.x+=bx; c.pos.z+=bz; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; } g.position.set(c.pos.x,c.y,c.pos.z); c.yaw+=angDiff(c.yaw,Math.atan2(dx,dz))*Math.min(1,dt*6); g.rotation.y=c.yaw; continue; }
     let tgt=c.kind?TP:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.cp?new V3(c.cp.x,c.y,c.cp.z):c.see?TP:(lastKnown||(heat>0?P.dispatch:null));
     if(!tgt||(!c.see&&!c.cp&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
     if(c.detour){ if((c.detourT-=dt)<=0||c.detour.distanceTo(c.pos)<1.5) c.detour=null; else tgt=c.detour; }
@@ -2847,12 +2857,15 @@ function updatePolice(dt){
     for(const off of [0,0.6*side,-0.6*side,1.2*side,-1.2*side,1.75*side,-1.75*side]){ const a=a0+off, sx=Math.sin(a)*spd*dt, sz=Math.cos(a)*spd*dt; if(!blocked(c.pos.x+sx,c.pos.z+sz,c.y)&&!(goingUp&&ground(c.pos.x+sx*4,c.pos.z+sz*4,c.y+0.6).h<c.y-1.5)){ mx=sx; mz=sz; break; } }
     const prog=(mx*tx+mz*tz)/tl; c.stuckT=prog<spd*dt*0.25?(c.stuckT||0)+dt:0;
     if(c.stuckT>0.9&&!c.detour){ const pa=a0+side*(Math.PI/2)*(Math.random()<0.7?1:-1), r=10+Math.random()*10; c.detour=c.pos.clone().add(new V3(Math.sin(pa)*r+Math.sin(a0)*6,0,Math.cos(pa)*r+Math.cos(a0)*6)); c.detourT=3; c.stuckT=0; }
+    if(c.see&&!c.leave&&dist<2.6&&c.kind!=='boss'&&(mx*dx+mz*dz)>0&&Math.abs(TP.y-c.y)<2){ const k=Math.max(0,(dist-1.1)/1.5); mx*=k*0.5; mz*=k*0.5; }   /* close in, but don't glue onto the skater */
+    for(const o of COPS){ if(o===c) continue; const ox=c.pos.x+mx-o.pos.x, oz=c.pos.z+mz-o.pos.z, od=Math.hypot(ox,oz); if(od<1.2&&od>0.001&&Math.abs(o.y-c.y)<2){ mx+=ox/od*(1.2-od)*0.5; mz+=oz/od*(1.2-od)*0.5; } }   /* and don't stack on each other */
+    if(blocked(c.pos.x+mx,c.pos.z+mz,c.y)){ mx=0; mz=0; }
     c.pos.x+=mx; c.pos.z+=mz; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; g.position.set(c.pos.x,c.y,c.pos.z);
     const moving=Math.hypot(mx,mz)/dt; if(moving>0.3) c.yaw+=angDiff(c.yaw,Math.atan2(mx,mz))*Math.min(1,dt*8); if(c.see) c.yaw+=angDiff(c.yaw,Math.atan2(dx,dz))*Math.min(1,dt*6);
     g.rotation.y=c.yaw; c.walk+=moving*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,moving/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armL.rotation.x=-sw*0.8;
     c.armR.rotation.x=c.see&&dist<26?-1.45:sw*0.8;                                                               // gun arm up when they have you
-    if(c.see&&dist<26&&c.shootCd<=0){ if(c.kind==='boss'){ c.shootCd=2.2+Math.random(); for(let b=0;b<3;b++) setTimeout(()=>{ if(COPS.includes(c)&&c.daze<=0) shoot(c); },b*150); } else { c.shootCd=(c.kind?1.6:1.25)+Math.random()*0.9; shoot(c); } }
-    if(dist<1.3*(c.kind==='boss'?1.5:1)&&Math.abs(TP.y-c.y)<1.3&&!(T.local&&(P.invuln>0||P.knock>0))&&!(c.hitCd>clock)){ c.hitCd=clock+1.5; hitTarget(T,c.kind==='boss'?24:18,'TACKLED!',[dx/dist*7,4,dz/dist*7]); }
+    if(c.see&&dist<26&&c.shootCd<=0&&!(T.local&&(P.invuln>0||P.knock>0))){ if(c.kind==='boss'){ c.shootCd=2.2+Math.random(); for(let b=0;b<3;b++) setTimeout(()=>{ if(COPS.includes(c)&&c.daze<=0) shoot(c); },b*150); } else { c.shootCd=(c.kind?1.8:1.6)+Math.random()*1.0; shoot(c); } }
+    if(dist<1.3*(c.kind==='boss'?1.5:1)&&Math.abs(TP.y-c.y)<1.3&&!(T.local&&(P.invuln>0||P.knock>0))&&!(c.hitCd>clock)){ c.hitCd=clock+1.5; hitTarget(T,c.kind==='boss'?16:12,'TACKLED!',[dx/dist*9,5,dz/dist*9]); c.recover=2.4; }   /* after a tackle the cop staggers back instead of pinning you */
     if(!c.see&&!c.leave&&lastKnown&&c.droneCd<=0&&PDRONES.length<Math.ceil(heat/2)){ c.droneCd=14+Math.random()*6; launchDrone(c); }
   }
   for(let i=PDRONES.length-1;i>=0;i--){ const d=PDRONES[i]; if(!d) continue; d.life-=dt;
@@ -2866,7 +2879,7 @@ function updatePolice(dt){
   // wanted stars: stay unseen (or far away) to shed them, one every 5s
   P.heatGrace=Math.max(0,(P.heatGrace||0)-dt);
   if(MP.live&&crewHere().length&&(P.polT=(P.polT||0)-dt)<=0){ P.polT=0.12; mpSend(policeSnapshot()); }
-  if(seen){ spotT=1.2; evadeT=0; P.heatGrace=0; } else { spotT-=dt; if(heat>0&&P.heatGrace<=0){ evadeT+=dt*(nearest>50?2:1); if(evadeT>=5){ evadeT=0; heat--; popup(heat?'LOST A STAR':'EVADED!','big'); blip(700,0.1,'triangle',0.08,1050); if(!heat){ lastKnown=null; message('EVADED',1.6); } } } }
+  if(seen){ spotT=1.2; evadeT=0; P.heatGrace=0; } else { spotT-=dt; if(heat>0&&P.heatGrace<=0){ evadeT+=dt*(nearest>80?2:1); if(evadeT>=7){ evadeT=0; heat--; popup(heat?'LOST A STAR':'EVADED!','big'); blip(700,0.1,'triangle',0.08,1050); if(!heat){ lastKnown=null; message('EVADED',1.6); } } } }
 }
 // ====================================================================== AUDIO: SFX + DYNAMIC MUSIC (layers follow Style Flow)
 const AU={ctx:null,music:true};
