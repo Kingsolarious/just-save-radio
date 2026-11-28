@@ -2537,7 +2537,7 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
     retarget, addClip, onEvent, clipSlots:slots};
 }
 // Player model loading: characters/player.glb (Mixamo-rigged or named-joint) if present, otherwise crown_skater.glb.
-function applyPlayerRig(rig){ scene.remove(SK.root); for(const k of ['retarget','upper','splay','addClip','onEvent','clipSlots']) delete SK[k]; Object.assign(SK,rig); scene.add(SK.root); }
+function applyPlayerRig(rig){ rig.style=(CHARS.find(c=>c.id===CHAR)||{}).style; scene.remove(SK.root); for(const k of ['retarget','upper','splay','addClip','onEvent','clipSlots']) delete SK[k]; Object.assign(SK,rig); scene.add(SK.root); }
 // Optional characters/anims.json: { "skate": "anims/skating.glb", "grind": "anims/grind.glb", ... }  (paths relative to characters/)
 // Each file's first animation fills that slot. Slots: idle, skate, grind, wall, air, land, spray, bail, celebrate.
 function loadExtraClips(rig){
@@ -2558,9 +2558,9 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=64;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=65;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
-const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD}, {id:'boho',label:'LAI',url:'characters/boho.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
+const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD,style:{armAmp:1,strideK:1}}, {id:'boho',label:'LAI',url:'characters/boho.glb?v='+BUILD,style:{armAmp:0.55,strideK:0.82}} ];   // style: arm swing size, stride rate   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
@@ -3710,12 +3710,13 @@ function strideFeet(ph,hs){
 /* Ski-pole arms: on every leg push both arms "pole" together - reach forward with bent elbows, plant low in front,
    then drive down and back past the hips as the elbows straighten, and swing forward again during the glide. The arm on
    the pushing side drives a little deeper; the chest crunches slightly into each drive. */
-function poleArms(ph){   // alternating poles: each arm plants, drives back and swings forward, opposite to its leg
+function poleArms(ph,amp=1){   // alternating poles: each arm plants, drives back and swings forward, opposite to its leg
   const one=q=>{ q=((q%1)+1)%1; const DRIVE=0.5;
     if(q<DRIVE){ const t=smooth01(q/DRIVE); return [lerp(-92,40,t),lerp(-48,-6,t),Math.sin(Math.PI*t)]; }
     const t=(q-DRIVE)/(1-DRIVE), u=smooth01(t); return [lerp(40,-92,u),-6-62*Math.sin(Math.PI*Math.min(1,t*1.1)),0]; };
   const R=one(ph+0.45), L=one(ph+0.95);   // the right arm drives while the left leg pushes, and vice versa
-  return { aL:[L[0],0,-14], aR:[R[0],0,14], eL:[L[1]], eR:[R[1]], crunch:(L[2]+R[2])*4 }; }
+  const A=v=>-26+(v+26)*amp, Eb=v=>-30+(v+30)*amp;   // smaller swing around a relaxed middle
+  return { aL:[A(L[0]),0,-14], aR:[A(R[0]),0,14], eL:[Eb(L[1])], eR:[Eb(R[1])], crunch:(L[2]+R[2])*4*amp }; }
 function animateBlader(dt,r,P,hs){
   const S=r._anim??={cur:null,wasG:true,landT:0};
   if(P.grounded&&!S.wasG&&!P.grind) S.landT=0.3; S.wasG=P.grounded||!!P.grind; S.landT=Math.max(0,S.landT-dt);
@@ -3732,7 +3733,7 @@ function animateBlader(dt,r,P,hs){
   else if(P.inJump){ tgt=BA.load; rate=20; }
   else if(S.landT>0){ tgt=BA.land; rate=24; }
   else if(P.sliding){ tgt=side(BA.slide); }
-  else if(hs>1.5){ const ph=(P.stride||0)/(Math.PI*2), st=samplePose(BA.stride,ph), orb=strideFeet(ph,hs), pa=poleArms(ph); st.fL=orb.fL; st.fR=orb.fR; st.hp=orb.hp;   // legs on the orbit
+  else if(hs>1.5){ const ph=(P.stride||0)/(Math.PI*2), st=samplePose(BA.stride,ph), orb=strideFeet(ph,hs), pa=poleArms(ph,(r.style&&r.style.armAmp)||1); st.fL=orb.fL; st.fR=orb.fR; st.hp=orb.hp;   // legs on the orbit
     st.aL=pa.aL; st.aR=pa.aR; st.eL=pa.eL; st.eR=pa.eR; st.up=[st.up[0]+pa.crunch,st.up[1]*0.5,st.up[2]];   // arms pole like ski poles
     tgt=hs>17?mixPose(st,BA.fast,clamp((hs-17)/8,0,0.8)):st; rate=24; }
   else { tgt=samplePose(BA.idle,clock/3.2); rate=6; }
@@ -3793,7 +3794,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   const L1=r.L1||0.44, L2=r.L2||0.56, H=r.crouchK?Math.max((L1+L2)*(P.grind?(r.grindFloor??0.4):0.45),(L1+L2)*(0.98-cr*r.crouchK*(P.grind?1.3:1))):(L1+L2)*0.98-cr*0.4;                                         // thigh, shin+skate, hip height
   const ikA=Math.acos(clamp((L1*L1+H*H-L2*L2)/(2*L1*H),-1,1)), ikC=Math.acos(clamp((L2*L2+H*H-L1*L1)/(2*L2*H),-1,1));
   r.body.position.y=H;
-  const stride=(P.grounded&&!P.grind&&hs>1)?1:0; P.stride+=dt*(3+hs*0.33)*stride;
+  const stride=(P.grounded&&!P.grind&&hs>1)?1:0; P.stride+=dt*(3+hs*0.33)*stride*((r.style&&r.style.strideK)||1);
   const footIK=!!r.L.ankle;
   const sw=Math.sin(P.stride)*0.45*stride;
   const lift=Math.max(0,Math.sin(P.stride))*0.5*stride, liftR=Math.max(0,-Math.sin(P.stride))*0.5*stride;  // recovering leg tucks
@@ -4346,7 +4347,7 @@ function buildRig(cid){ return new Promise(res=>{ const c=CHARS.find(c=>c.id===c
 function remoteState(){ return {pos:new V3(),vel:new V3(),facing:0,grounded:true,grind:null,wall:null,qpAir:null,trick:null,stag:0,crouch:0.3,squash:0,slideAmt:0,sliding:false,slideSide:1,swapT:0,feetIn:0,stride:0,stance:1,sideStance:0,
   tiltV:new V3(0,1,0),snapOff:null,railLift:0,knock:0,kneeOut:0,gs:null,turn:0,invuln:0,inJump:false,inDrift:false,inBoost:false}; }
 function dressPeer(p){ const cid=CHARS.some(c=>c.id===(p.st&&p.st.c))?p.st.c:'blader'; if(p.char===cid) return; p.char=cid; const tok=p.dressTok=(p.dressTok||0)+1;
-  buildRig(cid).then(rig=>{ if(p.dressTok!==tok||MP.peers.get(p.id)!==p){ return; } if(p.rig) scene.remove(p.rig.root); p.rig=rig; scene.add(rig.root); rig.root.visible=p.g.visible; }); }
+  buildRig(cid).then(rig=>{ if(p.dressTok!==tok||MP.peers.get(p.id)!==p){ return; } rig.style=(CHARS.find(c=>c.id===cid)||{}).style; if(p.rig) scene.remove(p.rig.root); p.rig=rig; scene.add(rig.root); rig.root.visible=p.g.visible; }); }
 function addPeer(id,name,st){ if(id===MP.id||MP.peers.has(id)) return; const g=new THREE.Group(); g.userData.dyn=true; g.visible=false; const tag=nameTag(name); g.add(tag); scene.add(g);
   const p={id,name,st,g,tag,rig:null,char:null,R:remoteState()}; if(st&&st.p) p.R.pos.set(...st.p); MP.peers.set(id,p); dressPeer(p); refreshMpUI(); }
 function removePeer(p){ scene.remove(p.g); if(p.rig) scene.remove(p.rig.root); MP.peers.delete(p.id); }
