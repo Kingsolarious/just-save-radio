@@ -2558,9 +2558,9 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=62;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=63;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
-const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD}, {id:'boho',label:'BOHO',url:'characters/boho.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
+const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD}, {id:'boho',label:'LAI',url:'characters/boho.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
