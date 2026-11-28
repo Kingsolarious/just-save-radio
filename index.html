@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=56;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=57;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3636,25 +3636,25 @@ const BA={
   idle:[ {t:0,   hp:[0,0.965,-0.02], fL:[-0.13,0.03,0], fR:[0.13,-0.03,0], kO:[8,8],  up:[8,0,0],  hd:[-6,0,0], aL:[4,0,-10], aR:[-2,0,10], eL:[-24], eR:[-18]},
          {t:0.5, hp:[0,0.955,-0.02],fL:[-0.13,0.03,0], fR:[0.13,-0.03,0], kO:[9,9],  up:[11,0,0], hd:[-8,0,0], aL:[1,0,-12], aR:[-5,0,12], eL:[-28], eR:[-22]} ],
   // four beats: push left (L foot out-back) · recover L under the hips, glide on R · push right · recover R
-  stride:(()=>{ const a={t:0,    hp:[0.06,0.68,-0.09], fL:[-0.42,-0.22,0],  fR:[0.06,0.06,0], kO:[16,10], up:[44,10,0], hd:[-36,-8,0], aL:[54,0,-14], aR:[-40,0,4],  eL:[-16], eR:[-46]},
-                      b={t:0.25, hp:[0.02,0.66,-0.09], fL:[-0.12,-0.02,0.1], fR:[0.05,0.03,0], kO:[12,10], up:[42,0,0],  hd:[-34,0,0],  aL:[14,0,-12], aR:[-10,0,10], eL:[-30], eR:[-36]};
+  stride:(()=>{ const a={t:0,    hp:[0.06,0.73,-0.09], fL:[-0.42,-0.22,0],  fR:[0.06,0.06,0], kO:[16,10], up:[44,10,0], hd:[-36,-8,0], aL:[54,0,-14], aR:[-40,0,4],  eL:[-16], eR:[-46]},
+                      b={t:0.25, hp:[0.02,0.71,-0.09], fL:[-0.12,-0.02,0.1], fR:[0.05,0.03,0], kO:[12,10], up:[42,0,0],  hd:[-34,0,0],  aL:[14,0,-12], aR:[-10,0,10], eL:[-30], eR:[-36]};
                 return [a,b,{...mirrorPose(a),t:0.5},{...mirrorPose(b),t:0.75}]; })(),
-  fast:{ hp:[0,0.68,-0.08], fL:[-0.15,0.02,0], fR:[0.15,-0.02,0], kO:[10,10], up:[44,0,0], hd:[-36,0,0], aL:[58,0,-10], aR:[58,0,10], eL:[-20], eR:[-20]},
+  fast:{ hp:[0,0.72,-0.08], fL:[-0.15,0.02,0], fR:[0.15,-0.02,0], kO:[10,10], up:[44,0,0], hd:[-36,0,0], aL:[58,0,-10], aR:[58,0,10], eL:[-20], eR:[-20]},
   load:{ hp:[0,0.6,-0.1],   fL:[-0.15,0.04,0], fR:[0.15,0.04,0],  kO:[14,14], up:[40,0,0], hd:[-32,0,0], aL:[58,0,-14], aR:[58,0,14], eL:[-14], eR:[-14]},
   air: { hp:[0,0.86,0],     fL:[-0.15,0.06,0.22], fR:[0.15,-0.04,0.14], kO:[16,14], up:[14,0,0], hd:[-12,0,0], aL:[-40,0,-44], aR:[-24,0,40], eL:[-44], eR:[-36]},
   fall:{ hp:[0,0.86,0],     fL:[-0.16,0.06,0.06], fR:[0.16,-0.02,0.04], kO:[12,12], up:[12,0,0], hd:[-12,0,0], aL:[-26,0,-52], aR:[-20,0,50], eL:[-32], eR:[-28]},
-  land:{ hp:[0,0.64,-0.08], fL:[-0.17,0.03,0], fR:[0.17,-0.01,0], kO:[16,16], up:[36,0,0], hd:[-30,0,0], aL:[-32,0,-38], aR:[-30,0,38], eL:[-52], eR:[-50]},
+  land:{ hp:[0,0.7,-0.08], fL:[-0.17,0.03,0], fR:[0.17,-0.01,0], kO:[16,16], up:[36,0,0], hd:[-30,0,0], aL:[-32,0,-38], aR:[-30,0,38], eL:[-52], eR:[-50]},
   slide:{hp:[0.03,0.7,-0.06], fL:[-0.34,0.12,0], fR:[0.24,-0.1,0], kO:[18,12], up:[24,0,6], hd:[-20,0,0], aL:[-32,0,-52], aR:[-10,0,48], eL:[-42], eR:[-30]},
   wall:{ hp:[0,0.8,-0.02],  fL:[-0.15,0.06,0], fR:[0.15,-0.06,0], kO:[12,12], up:[18,0,0], hd:[-16,0,0], aL:[-34,0,-72], aR:[-10,0,42], eL:[-36], eR:[-30]},
   wallrun:{hp:[0,0.82,-0.04],fL:[-0.1,0.18,0.18], fR:[0.1,-0.12,0], kO:[8,8], up:[16,0,0], hd:[-24,0,0], aL:[-60,0,-20], aR:[30,0,20], eL:[-80], eR:[-60]},
   bail:{ hp:[0,0.5,0],      fL:[-0.22,0.32,0.22], fR:[0.2,0.2,0.08], kO:[24,20], up:[-12,0,0], hd:[12,0,0], aL:[-140,0,-42], aR:[-118,0,40], eL:[-30], eR:[-34]},
   // grinds: side-on (rail runs along his x), skates on the rail line (z = 0); the 50-50 rides along it (rail along z)
   grind:{
-    regular:  { hp:[0,0.7,-0.1],   fL:[-0.24,0.02,0], fR:[0.24,0.02,0], kO:[8,8],  up:[16,0,0],  aL:[-40,0,-40], aR:[26,0,52],  eL:[-30], eR:[-18]},
-    backside: { hp:[0,0.78,0.04],  fL:[-0.23,0,0], fR:[0.23,0,0], kO:[6,6],  up:[-10,0,-4], aL:[-10,0,-50], aR:[44,0,62],  eL:[-24], eR:[-20]},
-    frontside:{ hp:[0,0.62,-0.19], fL:[-0.22,0.04,0], fR:[0.22,0.04,0], kO:[10,10], up:[36,0,0], aL:[-50,0,-30], aR:[-6,0,46], eL:[-34], eR:[-24]},
-    fifty:    { hp:[0,0.67,-0.12], fL:[-0.02,0.12,0], fR:[0.02,-0.11,0], kO:[24,22], up:[24,10,0], aL:[-16,0,-58], aR:[14,0,56], eL:[-22], eR:[-16]},
-    blunt:    { hp:[0.03,0.68,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
+    regular:  { hp:[0,0.75,-0.1],   fL:[-0.24,0.02,0], fR:[0.24,0.02,0], kO:[8,8],  up:[16,0,0],  aL:[-40,0,-40], aR:[26,0,52],  eL:[-30], eR:[-18]},
+    backside: { hp:[0,0.8,0.04],  fL:[-0.23,0,0], fR:[0.23,0,0], kO:[6,6],  up:[-10,0,-4], aL:[-10,0,-50], aR:[44,0,62],  eL:[-24], eR:[-20]},
+    frontside:{ hp:[0,0.68,-0.19], fL:[-0.22,0.04,0], fR:[0.22,0.04,0], kO:[10,10], up:[36,0,0], aL:[-50,0,-30], aR:[-6,0,46], eL:[-34], eR:[-24]},
+    fifty:    { hp:[0,0.73,-0.12], fL:[-0.02,0.12,0], fR:[0.02,-0.11,0], kO:[24,22], up:[24,10,0], aL:[-16,0,-58], aR:[14,0,56], eL:[-22], eR:[-16]},
+    blunt:    { hp:[0.03,0.73,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
   // tricks (airborne): feet relative to the body
   trick:{
     tuck:    { hp:[0,0.8,0],  fL:[-0.12,0.12,0.42], fR:[0.12,0.12,0.42], kO:[10,10], up:[28,0,0], hd:[-20,0,0], aL:[-52,0,-20], aR:[-52,0,20], eL:[-92], eR:[-92]},
@@ -3740,7 +3740,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   if(P.qpAir&&P.qpAir.n&&!P.trick) _nv.copy(P.qpAir.n);   // stay lined up with the transition through vert air
   P.tiltV??=new V3(0,1,0); P.tiltV.lerp(_nv,Math.min(1,dt*(P.grounded?14:P.wall?9:P.qpAir?6:4))).normalize();
   _qt.setFromUnitVectors(_UP,P.tiltV); _qy.setFromAxisAngle(_UP,P.facing+(P.slideSide||1)*1.25*P.slideAmt); r.root.quaternion.copy(_qt).multiply(_qy);
-  P.squash=lerp(P.squash,0,Math.min(1,dt*9)); r.root.scale.set(1-P.squash*0.45,1+P.squash,1-P.squash*0.45);
+  P.squash=lerp(P.squash,0,Math.min(1,dt*9)); if(r.anim) r.root.scale.set(1,1,1); else r.root.scale.set(1-P.squash*0.45,1+P.squash,1-P.squash*0.45);   // BLADER: no cartoon squash, the knees absorb landings
   // crouch 0..1 drives hip height; 2-bone IK below keeps the skates planted under the hips
   let crouch=r.idleCrouch!==undefined?r.idleCrouch+Math.min(0.3,hs*0.018):(0.34+Math.min(0.18,hs*0.012))*(r.upright||1), lean=0, armsOut=0, side=0;          // skaters ride with bent knees, lower at speed
   const GS=P.grind&&r.crouchK?GRIND_STYLES[P.grindStyle]||GRIND_STYLES.regular:null; P.grindLand=Math.max(0,(P.grindLand||0)-dt);
