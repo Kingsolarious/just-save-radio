@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=59;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=60;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3701,6 +3701,16 @@ function strideFeet(ph,hs){
   const ext2=Math.cos((ph+0.06)*Math.PI*4);                               // dip at the end of each push
   out.hp=[clamp(sup/Math.max(supW,1e-3),-0.12,0.12)*0.55, 0.72-0.018*(ext2*0.5+0.5), -0.09];
   return out; }
+/* Ski-pole arms: on every leg push both arms "pole" together - reach forward with bent elbows, plant low in front,
+   then drive down and back past the hips as the elbows straighten, and swing forward again during the glide. The arm on
+   the pushing side drives a little deeper; the chest crunches slightly into each drive. */
+function poleArms(ph){
+  const q=(((ph*2)+0.32)%1+1)%1, DRIVE=0.5;
+  let x, e, crunch;
+  if(q<DRIVE){ const t=smooth01(q/DRIVE); x=lerp(-92,40,t); e=lerp(-48,-6,t); crunch=Math.sin(Math.PI*t)*7; }          // plant and drive back
+  else { const t=(q-DRIVE)/(1-DRIVE), u=smooth01(t); x=lerp(40,-92,u); e=-6-62*Math.sin(Math.PI*Math.min(1,t*1.1))+(-42+6)*u*0; crunch=0; }   // swing forward, elbows fold on the way through
+  const side=(((ph%1)+1)%1)<0.5?-1:1;                                     // which leg is pushing this half-cycle
+  return { aL:[x+(side<0?8:-4),0,-14], aR:[x+(side>0?8:-4),0,14], eL:[e], eR:[e], crunch }; }
 function animateBlader(dt,r,P,hs){
   const S=r._anim??={cur:null,wasG:true,landT:0};
   if(P.grounded&&!S.wasG&&!P.grind) S.landT=0.3; S.wasG=P.grounded||!!P.grind; S.landT=Math.max(0,S.landT-dt);
@@ -3717,7 +3727,8 @@ function animateBlader(dt,r,P,hs){
   else if(P.inJump){ tgt=BA.load; rate=20; }
   else if(S.landT>0){ tgt=BA.land; rate=24; }
   else if(P.sliding){ tgt=side(BA.slide); }
-  else if(hs>1.5){ const ph=(P.stride||0)/(Math.PI*2), st=samplePose(BA.stride,ph), orb=strideFeet(ph,hs); st.fL=orb.fL; st.fR=orb.fR; st.hp=orb.hp;   // upper body from the keys, legs on the orbit
+  else if(hs>1.5){ const ph=(P.stride||0)/(Math.PI*2), st=samplePose(BA.stride,ph), orb=strideFeet(ph,hs), pa=poleArms(ph); st.fL=orb.fL; st.fR=orb.fR; st.hp=orb.hp;   // legs on the orbit
+    st.aL=pa.aL; st.aR=pa.aR; st.eL=pa.eL; st.eR=pa.eR; st.up=[st.up[0]+pa.crunch,st.up[1]*0.5,st.up[2]];   // arms pole like ski poles
     tgt=hs>17?mixPose(st,BA.fast,clamp((hs-17)/8,0,0.8)):st; rate=24; }
   else { tgt=samplePose(BA.idle,clock/3.2); rate=6; }
   if(GEST.active&&!P.grind) tgt={...tgt,...BA.spray};
