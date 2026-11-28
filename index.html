@@ -2441,7 +2441,12 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
     const cn=childOf[n]||hand[n], cb=cn&&bones[cn];
     if(cb&&want[n]){ const dir=wp(cb).sub(wp(b)).normalize(); qc.setFromUnitVectors(dir,want[n]); }
     const region=n==='Hips'?'hips':/UpLeg|Leg|Foot/.test(n)?'legs':/Arm/.test(n)?'arms':'upper';
-    bind.push({bone:b,proxy:proxyFor[n],qc,rb:wq(b),region}); }
+    bind.push({bone:b,proxy:proxyFor[n],qc,rb:wq(b),region,r0:b.quaternion.clone(),name:n}); }
+  /* the back bends through every spine bone (not one hinge), and the elbows/neck get their own bend */
+  const spineX=['Spine1','Spine2'].map(n=>bones[n]).filter(Boolean).map(b=>({bone:b,r0:b.quaternion.clone()}));
+  const SPF=spineX.length===2?[0.4,0.32,0.28]:spineX.length===1?[0.55,0.45]:[1];
+  const elbows=['LeftForeArm','RightForeArm'].map(n=>({fa:bones[n],hand:bones[n.replace('ForeArm','Hand')]})).filter(e=>e.fa&&e.hand);
+  const _d=new THREE.Quaternion(), _i=new THREE.Quaternion(), _w=new THREE.Quaternion(), _pw=new THREE.Quaternion(), _a=new V3(), _f=new V3(), _h=new V3(), _e=new V3();
   const L1=BP.LeftUpLeg.distanceTo(BP.LeftLeg), L2s=BP.LeftLeg.distanceTo(BP.LeftFoot), ANK=BP.LeftFoot.y;
   // ---- animation clips: slots picked by game state, crossfaded, then blended per body region with the procedural pose
   const mixer=new THREE.AnimationMixer(src), slots={}, weights={};
@@ -2487,19 +2492,29 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
     for(const k in slots){ weights[k]=lerp(weights[k],k===slot?1:0,Math.min(1,dt*10)); slots[k].setEffectiveWeight(weights[k]); total+=weights[k]; }
     if(Object.keys(slots).length) mixer.update(dt);
     const share=SHARE[slot]||SHARE.idle, clipW=Math.min(1,total);
+    head.rotation.x=(P.trick||P.knock>0)?0:-(upper.rotation.x*0.65+body.rotation.x*0.45);   /* eyes up: the neck counters the lean */
     root.updateMatrixWorld(true);
     for(const e of bind){
       e.proxy.getWorldQuaternion(tq); tq.multiply(e.qc).multiply(e.rb);
       e.bone.parent.getWorldQuaternion(pq); tq.premultiply(pq.invert());              // procedural local rotation
       const procW=slot?1-clipW*share[e.region]:1;
+      if(e.name==='Spine'&&spineX.length&&procW>=0.999){ _d.copy(e.r0).invert().multiply(tq); _i.identity();
+        e.bone.quaternion.copy(e.r0).multiply(_i.clone().slerp(_d,SPF[0])); spineX.forEach((x,k)=>x.bone.quaternion.copy(x.r0).multiply(_i.clone().slerp(_d,SPF[k+1]))); e.bone.updateMatrixWorld(true); continue; }
       if(procW>=0.999) e.bone.quaternion.copy(tq); else { cq.copy(e.bone.quaternion); e.bone.quaternion.copy(cq.slerp(tq,procW)); }
-      if(e.bone===bones.Hips){ e.proxy.getWorldPosition(tv); e.bone.position.copy(e.bone.parent.worldToLocal(tv)); }
+      if(e.bone===bones.Hips){ e.proxy.getWorldPosition(tv); e.bone.position.copy(e.bone.parent.worldToLocal(tv));
+        if(!P.trick&&P.knock<=0){ const hinge=upper.rotation.x*0.55; root.getWorldQuaternion(_w); _a.set(1,0,0).applyQuaternion(_w);   /* skaters bend at the hips, not just the chest: the legs and spine targets are world-space, so they stay put */
+          e.bone.updateMatrixWorld(true); e.bone.getWorldQuaternion(_pw); _d.setFromAxisAngle(_a,hinge).multiply(_pw); e.bone.parent.getWorldQuaternion(_pw); e.bone.quaternion.copy(_pw.invert().multiply(_d)); } }
       e.bone.updateMatrixWorld(true);
     }
+    if(!slot){ const hs=Math.hypot(P.vel.x,P.vel.z);   /* elbows: relaxed bend, deeper when pumping at speed or tucked in the air */
+      const flex=GEST.active?0.2:P.grind?0.45:!P.grounded?0.95:hs>1.5?0.7+Math.min(0.35,hs*0.02):0.5;
+      root.getWorldQuaternion(_w); _f.set(0,0,1).applyQuaternion(_w);
+      for(const el of elbows){ el.fa.getWorldPosition(_e); el.hand.getWorldPosition(_h); _h.sub(_e).normalize(); _a.crossVectors(_h,_f); if(_a.lengthSq()<1e-4) continue; _a.normalize();
+        el.fa.getWorldQuaternion(_pw); _d.setFromAxisAngle(_a,flex).multiply(_pw); el.fa.parent.getWorldQuaternion(_pw); el.fa.quaternion.copy(_pw.invert().multiply(_d)); el.fa.updateMatrixWorld(true); } }
   }
   const onEvent=ev=>{ if(ev==='tag'&&slots.celebrate) celebrateT=1.1; };
   return {root,body,upper,torso:upper,head,L:{hip:hipL,knee:kneeL,ankle:ankleL},R:{hip:hipR,knee:kneeR,ankle:ankleR},aL,aR,
-    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.08,grindCrouch:0.6,leanK:0.8,kneeOutK:0.75,
+    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.3,grindCrouch:0.8,leanK:1.6,kneeOutK:0.9,
     retarget, addClip, onEvent, clipSlots:slots};
 }
 // Player model loading: characters/player.glb (Mixamo-rigged or named-joint) if present, otherwise crown_skater.glb.
