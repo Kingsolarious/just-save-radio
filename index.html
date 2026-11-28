@@ -2502,7 +2502,7 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
         e.bone.quaternion.copy(e.r0).multiply(_i.clone().slerp(_d,SPF[0])); spineX.forEach((x,k)=>x.bone.quaternion.copy(x.r0).multiply(_i.clone().slerp(_d,SPF[k+1]))); e.bone.updateMatrixWorld(true); continue; }
       if(procW>=0.999) e.bone.quaternion.copy(tq); else { cq.copy(e.bone.quaternion); e.bone.quaternion.copy(cq.slerp(tq,procW)); }
       if(e.bone===bones.Hips){ e.proxy.getWorldPosition(tv); e.bone.position.copy(e.bone.parent.worldToLocal(tv));
-        if(!P.trick&&P.knock<=0){ const ux=upper.rotation.x, hinge=ux>=0?ux*0.55:ux*0.95;   /* forward: bend at the hips; back (grinds): the whole straight back tips, no arch */ root.getWorldQuaternion(_w); _a.set(1,0,0).applyQuaternion(_w);   /* skaters bend at the hips, not just the chest: the legs and spine targets are world-space, so they stay put */
+        if(!P.trick&&P.knock<=0){ const ux=upper.rotation.x, hinge=(ux>=0&&!P.grind)?ux*0.55:ux*0.95;   /* rails: the whole straight back tips as one, no arch */   /* forward: bend at the hips; back (grinds): the whole straight back tips, no arch */ root.getWorldQuaternion(_w); _a.set(1,0,0).applyQuaternion(_w);   /* skaters bend at the hips, not just the chest: the legs and spine targets are world-space, so they stay put */
           e.bone.updateMatrixWorld(true); e.bone.getWorldQuaternion(_pw); _d.setFromAxisAngle(_a,hinge).multiply(_pw); e.bone.parent.getWorldQuaternion(_pw); e.bone.quaternion.copy(_pw.invert().multiply(_d)); } }
       e.bone.updateMatrixWorld(true);
     }
@@ -3618,7 +3618,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   if(P.sideStance===0) P.sideStance=1;
   // landing absorbs into the knees
   const cr=clamp(P.crouch+(P.squash<0?-P.squash*1.8:0),0,1);
-  const L1=r.L1||0.44, L2=r.L2||0.56, H=r.crouchK?Math.max((L1+L2)*(P.grind?0.27:0.45),(L1+L2)*(0.98-cr*r.crouchK*(P.grind?1.45:1))):(L1+L2)*0.98-cr*0.4;                                         // thigh, shin+skate, hip height
+  const L1=r.L1||0.44, L2=r.L2||0.56, H=r.crouchK?Math.max((L1+L2)*(P.grind?(r.grindFloor??0.4):0.45),(L1+L2)*(0.98-cr*r.crouchK*(P.grind?1.3:1))):(L1+L2)*0.98-cr*0.4;                                         // thigh, shin+skate, hip height
   const ikA=Math.acos(clamp((L1*L1+H*H-L2*L2)/(2*L1*H),-1,1)), ikC=Math.acos(clamp((L2*L2+H*H-L1*L1)/(2*L2*H),-1,1));
   r.body.position.y=H;
   const stride=(P.grounded&&!P.grind&&hs>1)?1:0; P.stride+=dt*(3+hs*0.33)*stride;
@@ -3630,14 +3630,14 @@ function updateSkaterFor(dt,SK,P,isLocal){
   if(footIK){
     // Foot targets in the hip frame (metres): lateral, drop to the ankle, forward. On a rail both ankles sit on the
     // rail line - one ahead, one behind - at the same height, so all wheels touch the rail. Ankles keep the skates level.
-    const stTarget=(P.grind?0.24:!P.grounded?0.17:0.04)*P.stance;
+    const stTarget=(P.grind?(r.crouchK?0.02:0.24):!P.grounded?0.17:0.04)*P.stance;
     P.stag=lerp(P.stag,stTarget,Math.min(1,dt*(P.swapT>0?16:10)));
     const drop=H-r.ANK, onFoot=P.grounded||P.grind, flat=onFoot?1:0.5;
-    P.kneeOut=lerp(P.kneeOut||0,(P.grind?0.6:!P.grounded?0.28:0.14)*(r.kneeOutK||1),Math.min(1,dt*12));   // V stance: knees out, feet together
+    P.kneeOut=lerp(P.kneeOut||0,(P.grind?(r.crouchK?1.15:0.6):!P.grounded?0.28:0.14)*(r.kneeOutK||1),Math.min(1,dt*12));   // rails: knees wide, skates together -> a V   // V stance: knees out, feet together
     for(const [leg,sd,lf] of [[r.L,-1,lift],[r.R,1,liftR]]){
       const splay=sd*((r.splay??0.06)+Math.max(0,sd<0?sw:-sw)*0.25);
       let lat=lerp(splay,-sd*r.hipX,P.feetIn);
-      let fwd=(sd<0?sw:-sw)*0.6+(sd<0?P.stag:-P.stag);
+      let fwd=(sd<0?sw:-sw)*0.6+(sd<0?P.stag:-P.stag)+(r.crouchK?P.feetIn*(r.grindFwd??0.16):0);   // rails: sit back, skates a touch ahead of the hips so the knees come up
       let dr=drop-lf*0.15-swapTuck*0.18;
       if(P.trick){ const env=Math.sin(clamp(P.trick.t/P.trick.dur,0,1)*Math.PI), lead=(sd<0)===(P.stance>0);
         switch(P.trick.kind){
@@ -3668,7 +3668,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   r.aL.rotation.z=lerp(r.aL.rotation.z,-armsOut*1.3-0.1,dt*10); r.aR.rotation.z=lerp(r.aR.rotation.z,armsOut*1.3+0.1,dt*10);
   if(P.inJump&&P.grounded&&!P.grind&&r.crouchK){ r.aL.rotation.x=r.aR.rotation.x=0.85; }   // wind-up: arms swing back as the knees load
   if(GEST.active){ r.aR.rotation.x=-1.4; r.aR.rotation.z=0.3; }
-  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=(P.grind&&r.crouchK)?0.14:(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* grinds: sit back over the heels, chest up */   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?0.22*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
+  const steep=Math.acos(clamp(P.tiltV.y,-1,1)), lk=(r.leanK||1)*Math.max(0.25,1-steep*1.3), leanX=(P.grind&&r.crouchK)?0.2:(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk,   /* grinds: sit back over the heels, chest up */   /* on steep transitions stand square to the ramp instead of hunching further */ leanY=P.grind?(r.crouchK?0.06:0.22)*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
   let by=r.upper?0:leanY, bx=r.upper?0:leanX;
   if(P.trick){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2), sg=P.trick.sgn, PI2=Math.PI*2;
     switch(P.trick.kind){
