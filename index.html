@@ -2708,6 +2708,13 @@ function busted(){ message('BUSTED!<br><span style="font-size:22px">BACK TO THE 
   const crew=MP.live&&crewHere().length>0;
   if(P.grind) endGrind(); if(P.wall) endWall(); dropCombo(); P.cans=Math.max(0,P.cans-3); if(!crew){ heat=0; evadeT=0; lastKnown=null; clearPolice(); } else lastKnown=null;   // in a crew the chase goes on for your friends
   const wasBoss=BOSS.active&&!crew; const cp=centerSpawn(); P.pos.copy(cp); P.checkpoint=cp.clone(); if(wasBoss) bossReset(); P.vel.set(0,0,0); P.grounded=false; P.knock=0; P.hp=100; P.invuln=3; cam.yaw=Math.atan2(-Math.sin(P.facing),-Math.cos(P.facing)); saveRun(); }
+/* the stagger after a tackle: rocked back on his heels, arms windmilling, feet stumbling. r = seconds of stagger left */
+function copStagger(c,r){ const g=c.g; g.rotation.order='YXZ';
+  if(!(r>0)){ if(g.rotation.x||g.rotation.z){ g.rotation.x=0; g.rotation.z=0; } return; }
+  const f=Math.min(1,r/0.6)*Math.min(1,(2.4-r)/0.15+0.2), w=clock*13+c.nid;
+  g.rotation.x=-0.42*f; g.rotation.z=Math.sin(w*0.45)*0.16*f;
+  c.armL.rotation.x=-2.3+Math.sin(w)*0.9*f; c.armR.rotation.x=-2.3-Math.sin(w)*0.9*f;
+  c.legL.rotation.x=0.5*f+Math.sin(w*0.8)*0.35*f; c.legR.rotation.x=-0.2*f-Math.sin(w*0.8)*0.35*f; }
 let _cSpawn=null; function centerSpawn(){   /* the clear street spot nearest the middle of the map, off the roads */
   if(!_cSpawn){ const onRoad=(x,z)=>ROADS.some(R=>R.axis==='x'?Math.abs(z-R.c)<RW+0.5&&x>R.a0&&x<R.a1:Math.abs(x-R.c)<RW+0.5&&z>R.a0&&z<R.a1);
     for(let k=0;k<1500&&!_cSpawn;k++){ const a=k*2.399, r=Math.sqrt(k)*1.6, x=Math.cos(a)*r, z=Math.sin(a)*r;
@@ -2746,7 +2753,7 @@ let nidSeq=1, POLSNAP=null;
 function policeSnapshot(){ const B=BOSS.boss&&BOSS.active?BOSS.boss:null;
   return {t:'pol',heat,spot:spotT>0?1:0,ev:+evadeT.toFixed(1),gr:+(P.heatGrace||0).toFixed(1),bb:bossesBeaten,
     boss:B?{hp:B.hp,max:B.maxHp,ar:B.armor,dz:B.daze>0?1:0,min:BOSS.minions,wv:BOSS.wave,wn:BOSS.waves,id:BOSS.id}:null,
-    c:COPS.map(c=>[c.nid??=nidSeq++,+c.pos.x.toFixed(2),+c.y.toFixed(2),+c.pos.z.toFixed(2),+c.yaw.toFixed(2),c.daze>0?1:0,c.kind==='boss'?2:c.kind==='minion'?1:0,c.see?1:0,c.flash.visible?1:0,c.corp?1:0]),
+    c:COPS.map(c=>[c.nid??=nidSeq++,+c.pos.x.toFixed(2),+c.y.toFixed(2),+c.pos.z.toFixed(2),+c.yaw.toFixed(2),c.daze>0?1:0,c.kind==='boss'?2:c.kind==='minion'?1:0,c.see?1:0,c.flash.visible?1:0,c.corp?1:0,c.recover>0?+c.recover.toFixed(2):0]),
     dr:PDRONES.map(d=>[d.nid??=nidSeq++,+d.pos.x.toFixed(1),+d.pos.y.toFixed(1),+d.pos.z.toFixed(1),d.daze>0?1:0]),
     tr:TRAFFIC.map(c=>[ROADS.indexOf(c.r),+c.u.toFixed(2),c.d,+c.v.toFixed(2),c.wait>0?1:0]),pk:pickupSnap()}; }   // the host drives the city's traffic for the whole crew
 function mirrorPolice(dt){ const S=POLSNAP; if(!S) return; if(S.pk){ mirrorPickups(S.pk); S.pk=null; } heat=S.heat; spotT=S.spot?1:-1; evadeT=S.ev; P.heatGrace=S.gr;
@@ -2761,7 +2768,8 @@ function mirrorPolice(dt){ const S=POLSNAP; if(!S) return; if(S.pk){ mirrorPicku
     c.g.position.set(c.pos.x,c.y,c.pos.z); c.g.rotation.y=c.yaw; c.stars.visible=!!e[5]; if(e[5]) c.stars.rotation.y+=dt*5; c.flash.visible=!!e[8];
     if(c.kind&&e[5]&&state==='play'&&!P.grounded&&!P.grind&&P.vel.y<0&&!(c.stompCd>clock)){ const sc=c.kind==='boss'?1.5:1, dd=Math.hypot(P.pos.x-c.pos.x,P.pos.z-c.pos.z);   /* guests stomp stunned enemies too: bounce now, the host applies the damage */
       if(dd<1.6*sc&&P.pos.y>c.y+1.2&&P.pos.y<c.y+3.6*sc){ c.stompCd=clock+0.6; P.vel.y=CFG.JUMP*0.95; sfx.stomp&&sfx.stomp(); popup('STOMP!','big'); rumble(0.4,0.7,140); mpSend({t:'stomp',nid:c.nid}); } }
-    const mv=Math.hypot(c.pos.x-ox,c.pos.z-oz)/Math.max(dt,1e-3); c.walk+=mv*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,mv/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armR.rotation.x=c.see?-1.45:sw*0.8; }
+    const mv=Math.hypot(c.pos.x-ox,c.pos.z-oz)/Math.max(dt,1e-3); c.walk+=mv*dt*1.4; const sw=Math.sin(c.walk)*Math.min(1,mv/4)*0.7; c.legL.rotation.x=sw; c.legR.rotation.x=-sw; c.armR.rotation.x=c.see?-1.45:sw*0.8;
+    if(e[10]>0){ if(!(c.recover>0)||Math.abs(c.recover-e[10])>0.3) c.recover=e[10]; else c.recover=Math.max(0.01,c.recover-dt); } else c.recover=0; copStagger(c,c.recover); }   /* the host's tackle stagger, played here too */
   const wd=new Map(S.dr.map(e=>[e[0],e]));
   for(let i=PDRONES.length-1;i>=0;i--){ const d=PDRONES[i]; if(!wd.has(d.nid)){ scene.remove(d.g); PDRONES.splice(i,1); } }
   for(const e of S.dr){ let d=PDRONES.find(d=>d.nid===e[0]); if(!d){ d=makeDrone(); d.nid=e[0]; d.pos.set(e[1],e[2],e[3]); d.life=8; d.daze=0; d.target=d.pos.clone(); PDRONES.push(d); }
@@ -2827,7 +2835,7 @@ function updatePolice(dt){
     if(c.leave){ c.daze=0; c.stars.visible=false; if(dist>70||(c.gone=(c.gone||0)+dt)>6){ scene.remove(g); COPS.splice(i,1); continue; } }
     if(c.kind&&c.daze>0&&!P.grounded&&!P.grind&&P.vel.y<0&&Math.hypot(P.pos.x-c.pos.x,P.pos.z-c.pos.z)<1.6*(c.kind==='boss'?1.5:1)&&P.pos.y>c.y+1.2){ P.vel.y=CFG.JUMP*0.95; bossDamage(c,2,'STOMP!'); sfx.stomp(); continue; }   // stomp a stunned enemy
     if(c.daze>0&&c.climb){ c.climb=null; c.cp=null; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; g.position.y=c.y; }   /* paint knocks a climber off the wall */
-    if(c.daze>0){ c.daze-=dt; c.see=false; c.stars.visible=true; c.stars.rotation.y+=dt*5; g.rotation.y+=dt*2.5; c.armL.rotation.x=c.armR.rotation.x=-2.6+Math.sin(clock*8)*0.3; c.legL.rotation.x=c.legR.rotation.x=0; if(c.daze<=0){ c.stars.visible=false; c.wander=null; } continue; }
+    if(c.daze>0){ c.recover=0; copStagger(c,0); c.daze-=dt; c.see=false; c.stars.visible=true; c.stars.rotation.y+=dt*5; g.rotation.y+=dt*2.5; c.armL.rotation.x=c.armR.rotation.x=-2.6+Math.sin(clock*8)*0.3; c.legL.rotation.x=c.legR.rotation.x=0; if(c.daze<=0){ c.stars.visible=false; c.wander=null; } continue; }
     c.stars.visible=false; if(!c.leave) nearest=Math.min(nearest,dist);
     if(c.losT<=0){ c.losT=0.3; c.see=false; if(!c.leave){ let best=null; for(const t of TG) if(copSees(c,t)&&(!best||t.pos.distanceTo(c.pos)<best.pos.distanceTo(c.pos))) best=t; if(best){ c.see=true; c.tg=best; } } }
     if(c.see){ seen=true; lastKnown=c.tg.pos.clone(); }
@@ -2846,7 +2854,8 @@ function updatePolice(dt){
       if(c.cp){ const ex=c.cp.x-c.pos.x, ez=c.cp.z-c.pos.z; if(Math.hypot(ex,ez)<0.9&&Math.abs(c.y-c.cp.base)<1.5){ c.pos.x=c.cp.x; c.pos.z=c.cp.z; c.climb={top:c.cp.top,ix:c.cp.ix,iz:c.cp.iz,yaw:Math.atan2(c.cp.ix,c.cp.iz),v:lastKnown.y>=SKYY-6?COP_CLIMB_SKY:COP_CLIMB};   /* chasing you up to the Sky Floor they climb much faster */ c.see=false;
           if(alertMsgT<=0&&T.local){ alertMsgT=8; popup('COPS ARE CLIMBING UP!','bad'); } continue; } } }
     else if(c.cp) c.cp=null;
-    if(c.recover>0){ c.recover-=dt; const bx=-dx/dist*3.2*dt, bz=-dz/dist*3.2*dt; if(!blocked(c.pos.x+bx,c.pos.z+bz,c.y)){ c.pos.x+=bx; c.pos.z+=bz; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; } g.position.set(c.pos.x,c.y,c.pos.z); c.yaw+=angDiff(c.yaw,Math.atan2(dx,dz))*Math.min(1,dt*6); g.rotation.y=c.yaw; continue; }
+    if(c.recover>0){ c.recover-=dt; const bx=-dx/dist*3.2*dt, bz=-dz/dist*3.2*dt; if(!blocked(c.pos.x+bx,c.pos.z+bz,c.y)){ c.pos.x+=bx; c.pos.z+=bz; c.y=ground(c.pos.x,c.pos.z,c.y+0.6).h; } g.position.set(c.pos.x,c.y,c.pos.z); c.yaw+=angDiff(c.yaw,Math.atan2(dx,dz))*Math.min(1,dt*6); g.rotation.y=c.yaw; copStagger(c,c.recover); continue; }
+    copStagger(c,0);
     let tgt=c.kind?TP:c.leave?c.pos.clone().add(new V3(-dx,0,-dz)):c.cp?new V3(c.cp.x,c.y,c.cp.z):c.see?TP:(lastKnown||(heat>0?P.dispatch:null));
     if(!tgt||(!c.see&&!c.cp&&tgt.distanceTo(c.pos)<2.5)){ if(!c.wander||c.wander.distanceTo(c.pos)<2) c.wander=c.pos.clone().add(new V3((Math.random()-0.5)*40,0,(Math.random()-0.5)*40)); tgt=c.wander; if(lastKnown&&!c.see&&lastKnown.distanceTo(c.pos)<2.5) lastKnown=null; }
     if(c.detour){ if((c.detourT-=dt)<=0||c.detour.distanceTo(c.pos)<1.5) c.detour=null; else tgt=c.detour; }
