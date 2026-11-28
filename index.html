@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=53;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=54;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3242,11 +3242,11 @@ function land(g){
 function finishTrick(){ const t=P.trick; P.trick=null; trick(t.name,t.pts); }
 /* grind styles: lean (+ forward), torso twist, crouch scale, arms out, arm swing fwd/back (L,R), skate stagger, knee V */
 const GRIND_STYLES={
-  regular:  {name:'Grind',          lean:0.2,  twist:0.15, crouch:1,    arms:1.0, ax:[-0.2,0.3],  stag:0.02, knee:1.15},
-  backside: {name:'Backside Grind', lean:-0.25,twist:-0.2, crouch:0.9,  arms:1.3, ax:[0.35,0.45], stag:0.06, knee:1.15},
-  frontside:{name:'Frontside Grind',lean:0.55, twist:0.1,  crouch:1,    arms:0.8, ax:[-0.6,-0.3], stag:0.02, knee:1.0},
-  fifty:    {name:'50-50',          lean:0.12, twist:0,    crouch:0.85, arms:1.0, ax:[-0.3,-0.3], stag:0.09, knee:0.6},
-  blunt:    {name:'Bluntside',      lean:0.25, twist:0.7,  crouch:0.95, arms:1.1, ax:[0.2,-0.5],  stag:0.06, knee:0.85} };
+  regular:  {name:'Soul Grind', yaw:82,   lean:0.2,  twist:0.15, crouch:1,    arms:1.0, ax:[-0.2,0.3],  stag:0.02, knee:1.15},
+  backside: {name:'Backside Grind', yaw:-82, lean:-0.25,twist:-0.2, crouch:0.9,  arms:1.3, ax:[0.35,0.45], stag:0.06, knee:1.15},
+  frontside:{name:'Frontside Grind',yaw:82, lean:0.55, twist:0.1,  crouch:1,    arms:0.8, ax:[-0.6,-0.3], stag:0.02, knee:1.0},
+  fifty:    {name:'50-50', yaw:0,          lean:0.12, twist:0,    crouch:0.85, arms:1.0, ax:[-0.3,-0.3], stag:0.09, knee:0.6},
+  blunt:    {name:'Bluntside', yaw:55,     lean:0.25, twist:0.7,  crouch:0.95, arms:1.1, ax:[0.2,-0.5],  stag:0.06, knee:0.85} };
 const GRIND_KEYS=Object.keys(GRIND_STYLES);
 function startGrind(r,s){
   rumble(0.15,0.45,140); { const q=railPt(r,s,new V3()); (P.snapOff??=new V3()).add(P.pos.clone().sub(q)).clampLength(0,2.5); }   // ease the body onto the rail instead of teleporting
@@ -3640,12 +3640,12 @@ const BA={
   wall:{ up:[22,0,0], hd:[-16,0,0], hL:[-56,0,-14], hR:[-44,0,14], kL:[86], kR:[68], aL:[-34,0,-72], aR:[-10,0,42], fL:[-36], fR:[-30]},
   wallrun:{up:[18,0,0], hd:[-26,0,0], hL:[-70,0,-6], hR:[-20,0,6], kL:[100], kR:[40], aL:[-60,0,-20], aR:[30,0,20], fL:[-80], fR:[-60]},
   bail:{ up:[-12,0,0], hd:[12,0,0], hL:[-86,0,-32], hR:[-60,0,30], kL:[120], kR:[78], aL:[-140,0,-42], aR:[-118,0,40], fL:[-30], fR:[-34]},
-  grind:{
-    regular:  { up:[18,10,0],  hd:[-14,-8,0], hL:[-78,0,-26], hR:[-78,0,26], kL:[118], kR:[118], aL:[-8,0,-80],  aR:[-12,0,76], fL:[-24], fR:[-30]},
-    backside: { up:[-12,-12,0],hd:[8,8,0],    hL:[-70,0,-24], hR:[-70,0,24], kL:[106], kR:[106], aL:[26,0,-96],  aR:[30,0,92],  fL:[-18], fR:[-20]},
-    frontside:{ up:[42,6,0],   hd:[-36,-4,0], hL:[-84,0,-18], hR:[-84,0,18], kL:[124], kR:[124], aL:[-46,0,-56], aR:[-36,0,60], fL:[-42], fR:[-36]},
-    fifty:    { up:[12,0,0],   hd:[-8,0,0],   hL:[-46,0,-10], hR:[-64,0,10], kL:[70],  kR:[96],  aL:[-20,0,-72], aR:[-20,0,72], fL:[-30], fR:[-30]},
-    blunt:    { up:[22,38,0],  hd:[-14,-30,0],hL:[-74,0,-20], hR:[-70,0,22], kL:[112], kR:[104], aL:[12,0,-90],  aR:[-32,0,70], fL:[-24], fR:[-46]} },
+  grind:{   // side-on: the rail runs left-right of him, skates across it, legs spread along it
+    regular:  { up:[16,0,0],   hL:[-50,0,-22], hR:[-46,0,22], kL:[92], kR:[86], ftL:[0,0,8], ftR:[0,0,-8], aL:[-14,0,-74], aR:[-6,0,70], fL:[-28], fR:[-24]},
+    backside: { up:[-8,0,-4],  hL:[-40,0,-24], hR:[-38,0,24], kL:[78], kR:[74], ftL:[0,0,8], ftR:[0,0,-8], aL:[30,0,-92], aR:[26,0,96], fL:[-16], fR:[-14]},
+    frontside:{ up:[36,0,0],   hL:[-60,0,-20], hR:[-56,0,20], kL:[106], kR:[100], ftL:[0,0,8], ftR:[0,0,-8], aL:[-40,0,-58], aR:[-30,0,62], fL:[-40], fR:[-34]},
+    fifty:    { up:[18,0,0],   hL:[-58,0,-6],  hR:[-6,0,6],   kL:[92], kR:[58], aL:[-22,0,-70], aR:[-16,0,72], fL:[-30], fR:[-28]},
+    blunt:    { up:[22,26,0],  hL:[-54,0,-20], hR:[-36,0,22], kL:[96], kR:[72], ftL:[0,0,8], ftR:[0,0,-8], aL:[10,0,-88], aR:[-30,0,68], fL:[-22], fR:[-42]} },
   trick:{
     tuck:    { up:[30,0,0], hd:[-20,0,0], hL:[-116,0,-8], hR:[-116,0,8], kL:[142], kR:[142], aL:[-52,0,-20], aR:[-52,0,20], fL:[-92], fR:[-92]},
     spin:    { up:[10,0,0], hL:[-56,0,-6], hR:[-56,0,6], kL:[88], kR:[88], aL:[-24,0,-30], aR:[-24,0,30], fL:[-104], fR:[-104]},
@@ -3671,8 +3671,9 @@ function animateBlader(dt,r,P,hs){
   if(P.knock>0){ tgt=BA.bail; rate=18; }
   else if(P.grind){ const g=BA.grind[P.grindStyle]||BA.grind.regular; tgt=side(g); rate=P.grindLand>0?24:10;
     const sw=Math.sin(clock*2.2), sl=P.grind.r?railTan(P.grind.r,P.grind.s,_gt).y*P.grind.dir:0;   // balance sway, lean into down-rails
-    tgt={...tgt,up:[tgt.up[0]-sl*40+sw*3,tgt.up[1]+Math.sin(clock*1.3)*5,tgt.up[2]],aL:[tgt.aL[0]+sw*8,tgt.aL[1],tgt.aL[2]],aR:[tgt.aR[0]-sw*8,tgt.aR[1],tgt.aR[2]],hd:[tgt.hd?tgt.hd[0]:0,(tgt.hd?tgt.hd[1]:0)+Math.sin(clock*0.8)*10,0]};
-    if(P.grindLand>0){ const d=P.grindLand*60; tgt={...tgt,kL:[tgt.kL[0]+d],kR:[tgt.kR[0]+d],hL:[tgt.hL[0]-d*0.5,0,tgt.hL[2]],hR:[tgt.hR[0]-d*0.5,0,tgt.hR[2]]}; } }
+    const gy=(GRIND_STYLES[P.grindStyle]||{yaw:0}).yaw*P.stance;   // head turns to look down the rail
+    tgt={...tgt,up:[tgt.up[0]-sl*30+sw*2,tgt.up[1]-gy*0.15+Math.sin(clock*1.3)*4,tgt.up[2]],aL:[tgt.aL[0]+sw*7,tgt.aL[1],tgt.aL[2]+sw*4],aR:[tgt.aR[0]-sw*7,tgt.aR[1],tgt.aR[2]+sw*4],hd:[-8,-gy*0.55+Math.sin(clock*0.8)*6,0]};
+    if(P.grindLand>0){ const d=P.grindLand*45; tgt={...tgt,kL:[tgt.kL[0]+d],kR:[tgt.kR[0]+d],hL:[tgt.hL[0]-d*0.5,0,tgt.hL[2]],hR:[tgt.hR[0]-d*0.5,0,tgt.hR[2]]}; } }
   else if(P.wall){ tgt=P.wall.up?BA.wallrun:BA.wall; const into=(P.wall.n.x*Math.cos(P.facing)-P.wall.n.z*Math.sin(P.facing))>0; if(!P.wall.up&&into) tgt=mirrorPose(tgt); }
   else if(!P.grounded){ tgt=P.vel.y>-3?BA.air:mixPose(BA.air,BA.fall,clamp((-P.vel.y-3)/6,0,1));
     if(P.trick){ const tp=BA.trick[TRICK_POSE[P.trick.kind]||'tuck'], k=clamp(P.trick.t/P.trick.dur,0,1), env=Math.min(1,Math.sin(k*Math.PI)*1.6); tgt=mixPose(tgt,P.stance<0?mirrorPose(tp):tp,env); rate=22; } }
@@ -3703,7 +3704,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   const r=SK, hs=Math.hypot(P.vel.x,P.vel.z);
   r.root.position.copy(P.pos); if(P.snapOff){ r.root.position.add(P.snapOff); P.snapOff.multiplyScalar(Math.exp(-dt*11)); } P.railLift=lerp(P.railLift||0,P.grind?(P.grind.r.radius||0.08):0,Math.min(1,dt*20)); r.root.position.y+=P.railLift;
   let tf=P.facing;
-  if(P.grind){ const T=railTan(P.grind.r,P.grind.s,tmp); tf=Math.atan2(T.x*P.grind.dir,T.z*P.grind.dir); }
+  if(P.grind){ const T=railTan(P.grind.r,P.grind.s,tmp); tf=Math.atan2(T.x*P.grind.dir,T.z*P.grind.dir); if(r.anim){ const g=GRIND_STYLES[P.grindStyle]; if(g) tf+=g.yaw*D2R*P.stance; } }   // inline grinds: turn side-on, skates across the rail
   else if(P.wall) tf=P.wall.up?Math.atan2(-P.wall.n.x,-P.wall.n.z):Math.atan2(P.wall.t.x,P.wall.t.z);
   else if(P.qpAir) tf=P.vel.y>1.5?Math.atan2(P.qpAir.r.x,P.qpAir.r.z):Math.atan2(-P.qpAir.r.x,-P.qpAir.r.z);   // ride up facing the lip, turn round at the peak, drop back in
   else if(hs>0.6&&P.knock<=0) tf=Math.atan2(P.vel.x,P.vel.z);
