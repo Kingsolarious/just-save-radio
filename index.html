@@ -178,7 +178,7 @@
   <div class="sub">FREQUENCY ZERO</div>
   <div class="hidden" id="dname">HARBOR HEIGHTS</div>
   <div class="row"><span>CREW TAG</span><input id="crew" maxlength="8" value="NOVA" spellcheck="false"></div>
-  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="charbtn" class="tool">CHARACTER: CROWN</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="levelbtn" class="tool hidden">LEVEL: STORY</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
+  <div class="row"><canvas id="sigprev" width="320" height="160"></canvas><div style="display:flex;flex-direction:column;gap:10px"><button id="edit" class="tool">SIGNATURE TAG</button><button id="assist" class="tool">TAGGING: GESTURES</button><button id="tod" class="tool">TIME: DAY</button><button id="district" class="tool">DISTRICT: HARBOR HEIGHTS</button><button id="ctrlbtn" class="tool">CONTROLS</button><button id="mpbtn" class="tool">ONLINE: OFF</button><button id="levelbtn" class="tool hidden">LEVEL: STORY</button><button id="cambtn" class="tool">CAMERA: NORMAL</button><button id="fsbtn" class="tool">FULLSCREEN</button></div></div>
   <div class="note" id="padhint">On a phone or tablet: pair your PlayStation or Xbox controller in Bluetooth settings, then press any button on it.</div>
   <button id="continue" class="hidden">CONTINUE</button>
   <button id="start">SKATE!</button>
@@ -2507,14 +2507,14 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
       e.bone.updateMatrixWorld(true);
     }
     if(!slot){ const hs=Math.hypot(P.vel.x,P.vel.z);   /* elbows: relaxed bend, deeper when pumping at speed or tucked in the air */
-      const flex=GEST.active?0.2:P.grind?0.45:!P.grounded?0.95:hs>1.5?0.7+Math.min(0.35,hs*0.02):0.5;
+      const flex=GEST.active?0.1:P.grind?0.2:P.knock>0?0.5:!P.grounded?(P.trick?0.9:0.55):hs>1.5?0.35+Math.min(0.2,hs*0.01):0.3;
       root.getWorldQuaternion(_w); _f.set(0,0,1).applyQuaternion(_w);
       for(const el of elbows){ el.fa.getWorldPosition(_e); el.hand.getWorldPosition(_h); _h.sub(_e).normalize(); _a.crossVectors(_h,_f); if(_a.lengthSq()<1e-4) continue; _a.normalize();
         el.fa.getWorldQuaternion(_pw); _d.setFromAxisAngle(_a,flex).multiply(_pw); el.fa.parent.getWorldQuaternion(_pw); el.fa.quaternion.copy(_pw.invert().multiply(_d)); el.fa.updateMatrixWorld(true); } }
   }
   const onEvent=ev=>{ if(ev==='tag'&&slots.celebrate) celebrateT=1.1; };
   return {root,body,upper,torso:upper,head,L:{hip:hipL,knee:kneeL,ankle:ankleL},R:{hip:hipR,knee:kneeR,ankle:ankleR},aL,aR,
-    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.3,grindCrouch:0.8,leanK:1.6,kneeOutK:0.9,
+    L1,L2:BP.LeftLeg.y,L2s,ANK,hipX:Math.abs(BP[A+'UpLeg'].x-hipsP.x),splay:0.08,custom:true,upright:0.6,idleCrouch:0.22,grindCrouch:0.75,leanK:1.75,kneeOutK:0.9,crouchK:0.5,
     retarget, addClip, onEvent, clipSlots:slots};
 }
 // Player model loading: characters/player.glb (Mixamo-rigged or named-joint) if present, otherwise crown_skater.glb.
@@ -2539,8 +2539,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb'}, {id:'crown',label:'CROWN',url:PLAYER_GLB}, {id:'punk',label:'PUNK',url:CHARACTER_URL,parts:true}, {id:'classic',label:'CLASSIC'} ];
-if(UNLOCK.zero) CHARS.push({id:'zero',label:'ZERO'});
+const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb'} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
 function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c.id; try{ localStorage.setItem('inkline_char',c.id); }catch(e){}
   const b=document.getElementById('charbtn'); if(b) b.textContent='CHARACTER: '+c.label;
@@ -2549,7 +2548,7 @@ function selectCharacter(id){ const c=CHARS.find(c=>c.id===id)||CHARS[0]; CHAR=c
   if(c.parts){ new GLTFLoader().load(c.url,gltf=>{ if(CHAR!==c.id) return; try{ applyPlayerRig(rigFromParts(gltf.scene)); }catch(err){ console.warn('PUNK rig failed',err); applyPlayerRig(makeSkater()); } }); return; }
   loadPlayerModel(c.url,()=>applyPlayerRig(makeSkater())); }
 // a custom Mixamo model dropped in as characters/player.glb shows up as an extra choice
-fetch('characters/player.glb',{method:'HEAD'}).then(r=>{ if(r.ok){ CHARS.unshift({id:'custom',label:'CUSTOM',url:'characters/player.glb'}); } }).catch(()=>{}).finally(()=>{
+Promise.resolve().finally(()=>{
   let saved=null; try{ saved=localStorage.getItem('inkline_char'); if(!localStorage.getItem('inkline_char_blader')){ localStorage.setItem('inkline_char_blader','1'); saved='blader'; } }catch(e){}   /* everyone starts on the new rollerblader once; the CHARACTER button still switches */
   selectCharacter(CHARS.some(c=>c.id===saved)?saved:CHARS[0].id); });
 const USE_GLB_CHARACTER=false;   // legacy blockout loader below, kept for reference
@@ -3603,8 +3602,8 @@ function updateSkaterFor(dt,SK,P,isLocal){
   let crouch=r.idleCrouch!==undefined?r.idleCrouch+Math.min(0.3,hs*0.018):(0.34+Math.min(0.18,hs*0.012))*(r.upright||1), lean=0, armsOut=0, side=0;          // skaters ride with bent knees, lower at speed
   if(P.grind){ crouch=(r.grindCrouch||0.82); armsOut=1; side=0; }                // grind crouch (per character)
   else if(P.wall){ crouch=0.6; armsOut=0.6; const lx=Math.cos(P.facing), lz=-Math.sin(P.facing); lean=-0.85*(Math.sign(P.wall.n.x*lx+P.wall.n.z*lz)||1); }
-  else if(!P.grounded){ crouch=0.55; }
-  else if(P.inJump) crouch=0.8;                                           // load up before the jump
+  else if(!P.grounded){ crouch=r.crouchK?0.72:0.55; }
+  else if(P.inJump) crouch=r.crouchK?0.95:0.8;                            // load up before the jump: a deep squat
   if(P.grounded&&!P.grind) lean=-P.turn*(P.inDrift?0.7:0.35);
   if(P.slideAmt>0.05){ crouch=lerp(crouch,0.85,P.slideAmt); lean+=-(P.slideSide||1)*0.45*P.slideAmt; }
   P.crouch=lerp(P.crouch,crouch,Math.min(1,dt*10));
@@ -3612,7 +3611,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   if(P.sideStance===0) P.sideStance=1;
   // landing absorbs into the knees
   const cr=clamp(P.crouch+(P.squash<0?-P.squash*1.8:0),0,1);
-  const L1=r.L1||0.44, L2=r.L2||0.56, H=(L1+L2)*0.98-cr*0.4;                                         // thigh, shin+skate, hip height
+  const L1=r.L1||0.44, L2=r.L2||0.56, H=r.crouchK?Math.max((L1+L2)*0.45,(L1+L2)*(0.98-cr*r.crouchK)):(L1+L2)*0.98-cr*0.4;                                         // thigh, shin+skate, hip height
   const ikA=Math.acos(clamp((L1*L1+H*H-L2*L2)/(2*L1*H),-1,1)), ikC=Math.acos(clamp((L2*L2+H*H-L1*L1)/(2*L2*H),-1,1));
   r.body.position.y=H;
   const stride=(P.grounded&&!P.grind&&hs>1)?1:0; P.stride+=dt*(3+hs*0.33)*stride;
@@ -3660,6 +3659,7 @@ function updateSkaterFor(dt,SK,P,isLocal){
   }
   r.aL.rotation.x=-sw*1.1; r.aR.rotation.x=sw*1.1;
   r.aL.rotation.z=lerp(r.aL.rotation.z,-armsOut*1.3-0.1,dt*10); r.aR.rotation.z=lerp(r.aR.rotation.z,armsOut*1.3+0.1,dt*10);
+  if(P.inJump&&P.grounded&&!P.grind&&r.crouchK){ r.aL.rotation.x=r.aR.rotation.x=0.85; }   // wind-up: arms swing back as the knees load
   if(GEST.active){ r.aR.rotation.x=-1.4; r.aR.rotation.z=0.3; }
   const lk=r.leanK||1, leanX=(0.12+hs*0.005+cr*0.38+(P.grind?0.12:0))*lk, leanY=P.grind?0.22*P.stance:0;   // lean over the skates, shoulders open toward the lead foot
   let by=r.upper?0:leanY, bx=r.upper?0:leanX;
@@ -3678,13 +3678,13 @@ function updateSkaterFor(dt,SK,P,isLocal){
       case 'superman': { const v=Math.sin(Math.min(1,k)*Math.PI); bx+=1.25*v; r.aL.rotation.x=-2.8*v; r.aR.rotation.x=-2.8*v; break; }
       case 'heli': by+=e*PI2*2*sg; P.crouch=lerp(P.crouch,0.9,0.3); r.aR.rotation.x=1.4; r.aL.rotation.z=-1.6; break;
       default: P.crouch=lerp(P.crouch,0.9,0.3); r.aR.rotation.x=1.4; r.aL.rotation.z=-1.6; } }
-  if(P.knock>0){ bx=-1.3; r.body.position.y=0.35; }
+  if(P.knock>0){ if(r.crouchK){ bx=-1.05; P.crouch=lerp(P.crouch,0.9,0.4); r.body.position.y=0.42; r.aL.rotation.set(-1.1,0,-1.0); r.aR.rotation.set(-1.1,0,1.0); } else { bx=-1.3; r.body.position.y=0.35; } }
   r.body.rotation.y=lerp(r.body.rotation.y,by,P.trick?1:Math.min(1,dt*12));
   r.body.rotation.x=P.trick?bx:lerp(r.body.rotation.x,bx,Math.min(1,dt*10));
   r.body.rotation.z=lerp(r.body.rotation.z,lean,dt*(P.wall?14:8));
   if(r.upper){ r.upper.rotation.x=lerp(r.upper.rotation.x,P.knock>0?0:leanX,Math.min(1,dt*10)); r.upper.rotation.y=lerp(r.upper.rotation.y,leanY,Math.min(1,dt*10)); }
   if(P.trick&&(P.trick.kind==='side'||P.trick.kind==='side2')){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2); r.body.rotation.z=e*Math.PI*2*(P.trick.kind==='side2'?2:1)*P.trick.sgn; }
-  if(P.trick&&P.trick.flip){ const k=P.trick.t/P.trick.dur, tuck=Math.sin(Math.min(1,k)*Math.PI); P.crouch=lerp(P.crouch,0.85,0.5*tuck); r.aL.rotation.x=-1.2*tuck; r.aR.rotation.x=-1.2*tuck; }
+  if(P.trick&&(P.trick.flip||(r.crouchK&&/^(flip|bflip|cork|twist)/.test(P.trick.kind)))){ const k=P.trick.t/P.trick.dur, tuck=Math.sin(Math.min(1,k)*Math.PI); P.crouch=lerp(P.crouch,0.85,0.5*tuck); r.aL.rotation.x=-1.2*tuck; r.aR.rotation.x=-1.2*tuck; }
   r.root.visible=!(P.invuln>0&&Math.floor(performance.now()/90)%2===0);
   if(r.retarget) r.retarget(dt);
   if(hs>11&&(P.grounded||P.grind||P.wall)&&state==='play'){
@@ -3970,7 +3970,7 @@ const fmtTime=t=>{ const h=Math.floor(t/3600), m=Math.floor(t/60)%60, s=Math.flo
 
 // ====================================================================== EASTER EGG: the Gold Record
 // Claim the whole city and a big soft gold record appears somewhere hard to reach (follow the light).
-// Grab it to unlock ZERO and the AFTER HOURS level for good.
+// Grab it to unlock the AFTER HOURS level for good.
 let EGG=null, eggActive=false;
 function cityClaimed(){ if(eggActive||EGG){ return; } eggActive=true; spawnEgg(); score+=AFTER()?7500:5000; saveRun();
   message(`CITY CLAIMED!<br><span style="font-size:22px">SOMETHING GOLDEN JUST LANDED ON THE SUMMIT · GRIND TO THE TOP OF THE CITY</span>`,4); sfx.secret&&sfx.secret(); }
@@ -3988,9 +3988,9 @@ function eggTick(dt){ if(!EGG) return; EGG.t+=dt; const g=EGG.g; g.rotation.y+=d
   if(Math.random()<0.4) emit(EGG.pos.clone().add(rv(2.4)),new V3(0,1.5,0),0xffe27a,0.7,0.16,-1);
   if(state==='play'&&P.pos.distanceTo(g.position)<2.6) collectEgg(); }
 function collectEgg(){ scene.remove(EGG.g); EGG=null; eggActive=false; const first=!UNLOCK.zero; UNLOCK.zero=true; UNLOCK.afterHours=true; saveUnlocks();
-  if(!CHARS.some(c=>c.id==='zero')) CHARS.push({id:'zero',label:'ZERO'}); score+=10000; trick('GOLD RECORD',5000); sfx.secret&&sfx.secret(); rumble(1,1,900);
+  score+=10000; trick('GOLD RECORD',5000); sfx.secret&&sfx.secret(); rumble(1,1,900);
   for(let i=0;i<60;i++) emit(P.pos.clone().setY(P.pos.y+1.5),rv(12),i%2?0xffe27a:0xff3d8b,1,0.35,4);
-  message(`YOU FOUND THE GOLD RECORD!<br><span style="font-size:22px">${first?'NEW CHARACTER: ZERO · NEW LEVEL: AFTER HOURS':'+10,000 · THE CITY REMEMBERS'}</span>`,4.5); saveRun(); winTimer=5; }
+  message(`YOU FOUND THE GOLD RECORD!<br><span style="font-size:22px">${first?'NEW LEVEL: AFTER HOURS':'+10,000 · THE CITY REMEMBERS'}</span>`,4.5); saveRun(); winTimer=5; }
 // ====================================================================== GAME FLOW
 function startGame(tr){
   crew=($('crew').value||'NOVA').toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8)||'NOVA';
@@ -4160,7 +4160,7 @@ function buildRig(cid){ return new Promise(res=>{ const c=CHARS.find(c=>c.id===c
   new GLTFLoader().load(c.url,gltf=>{ try{ if(c.parts) res(rigFromParts(gltf.scene)); else { const mb=findMixamoBones(gltf.scene); res(mb?rigFromMixamo(gltf.scene,mb,gltf.animations||[]):rigFromGLB(gltf.scene)); } }catch(err){ res(makeSkater()); } },undefined,()=>res(makeSkater())); }); }
 function remoteState(){ return {pos:new V3(),vel:new V3(),facing:0,grounded:true,grind:null,wall:null,qpAir:null,trick:null,stag:0,crouch:0.3,squash:0,slideAmt:0,sliding:false,slideSide:1,swapT:0,feetIn:0,stride:0,stance:1,sideStance:0,
   tiltV:new V3(0,1,0),snapOff:null,railLift:0,knock:0,kneeOut:0,gs:null,turn:0,invuln:0,inJump:false,inDrift:false,inBoost:false}; }
-function dressPeer(p){ const cid=(p.st&&p.st.c)||'punk'; if(p.char===cid) return; p.char=cid; const tok=p.dressTok=(p.dressTok||0)+1;
+function dressPeer(p){ const cid='blader'; if(p.char===cid) return; p.char=cid; const tok=p.dressTok=(p.dressTok||0)+1;
   buildRig(cid).then(rig=>{ if(p.dressTok!==tok||MP.peers.get(p.id)!==p){ return; } if(p.rig) scene.remove(p.rig.root); p.rig=rig; scene.add(rig.root); rig.root.visible=p.g.visible; }); }
 function addPeer(id,name,st){ if(id===MP.id||MP.peers.has(id)) return; const g=new THREE.Group(); g.userData.dyn=true; g.visible=false; const tag=nameTag(name); g.add(tag); scene.add(g);
   const p={id,name,st,g,tag,rig:null,char:null,R:remoteState()}; if(st&&st.p) p.R.pos.set(...st.p); MP.peers.set(id,p); dressPeer(p); refreshMpUI(); }
@@ -4240,7 +4240,7 @@ document.addEventListener('fullscreenchange',fsLabel); document.addEventListener
 $('fsbtn').onclick=toggleFullscreen; $('pfs').onclick=toggleFullscreen;
 /* the fullscreen buttons stay on the title and pause menus everywhere, the installed app included (Android can still hide its bars) */
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')) navigator.serviceWorker.register('sw.js').catch(()=>{});
-$('charbtn').onclick=()=>{ const i=CHARS.findIndex(c=>c.id===CHAR); selectCharacter(CHARS[(i+1)%CHARS.length].id); blip(880,0.06,'square',0.06); };
+if($('charbtn')) $('charbtn').onclick=()=>{ const i=CHARS.findIndex(c=>c.id===CHAR); selectCharacter(CHARS[(i+1)%CHARS.length].id); blip(880,0.06,'square',0.06); };
 if(SUPA){ $('mpserverrow').classList.add('hidden'); $('mpcoderow').classList.remove('hidden'); try{ $('mpcode').value=localStorage.getItem('inkline_code')||''; }catch(e){} }
 const hosted=!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
 async function gateEnter(){ const code=$('gcode').value, name=($('gcrew').value||'NOVA').toUpperCase().replace(/[^A-Z0-9!?#$&*]/g,'').slice(0,8)||'NOVA';
@@ -4324,6 +4324,7 @@ function frame(now){
   post.render();
 }
 requestAnimationFrame(frame);
+window.__poseOnly=(n=30,dt=1/60)=>{ for(let i=0;i<n;i++) updateSkaterFor(dt,SK,P,true); };   // debug: run just the character pose (no physics) for pose review
 window.__step=(n=60,dt=1/60)=>{ for(let i=0;i<n;i++){ update(dt); updateSkater(dt); mpTick(dt); pressed.clear(); } };   // debug: advance the simulation without waiting for frames
 window.__egg={get EGG(){ return EGG; },cityClaimed:()=>cityClaimed(),get UNLOCK(){ return UNLOCK; },get LEVEL(){ return LEVEL; }};
 window.__floor=FLOOR; window.__pads=PADS; window.__lifts=LIFTS; window.__towers=TOWERS; window.__health=HEALTH; window.__camera=camera;
