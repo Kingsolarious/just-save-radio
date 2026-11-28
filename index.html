@@ -2453,7 +2453,7 @@ function rigFromMixamo(src,bones,clips=[],targetHeight=1.95){
   const rigK=model.scale.x, wheels=[], springs=[];
   src.traverse(o=>{ if(!o.isBone) return; const u=o.userData||{}; const qw=o.getWorldQuaternion(new THREE.Quaternion());
     if(u.wheel&&u.axis) wheels.push({b:o,q0:o.quaternion.clone(),axis:new V3(...u.axis).applyQuaternion(qw.clone().invert()).normalize(),r:(u.radius||0.04)*rigK,a:0});
-    if(u.spring&&u.tip){ const t=new V3(...u.tip); springs.push({b:o,q0:o.quaternion.clone(),dir:t.clone().normalize(),len:t.length()*rigK,k:(u.stiff||80)*0.45,d:(u.damp||8)*0.55,max:(u.max||0.5)*1.4,S:null,V:new V3()}); }
+    if(u.spring&&u.tip){ const t=new V3(...u.tip); springs.push({b:o,q0:o.quaternion.clone(),dir:t.clone().normalize(),len:t.length()*rigK,k:(u.stiff||80)*(o.name==='HairSpring'?1.1:0.6),d:(u.damp||8)*(o.name==='HairSpring'?1.2:0.7),max:(u.max||0.5)*(o.name==='HairSpring'?0.55:1.1),S:null,V:new V3()}); }
     if(u.wheel) o.traverse(m=>{ if(!m.isMesh||!m.material||!m.material.color||m.material.side===THREE.BackSide) return; const c=m.material.color.getHex(); if(Math.abs((c>>16)-0x2a)<6&&Math.abs(((c>>8)&255)-0x2a)<6&&Math.abs((c&255)-0x30)<6) m.material.color.set(0x3fd4ff); });   /* cyan hubs: you can see the wheels turn */ });
   const _bx=new V3(1,0,0), _wq=new THREE.Quaternion(), _sv=new V3(), _sb=new V3(), _st=new V3(), _d=new THREE.Quaternion(), _i=new THREE.Quaternion(), _w=new THREE.Quaternion(), _pw=new THREE.Quaternion(), _a=new V3(), _f=new V3(), _h=new V3(), _e=new V3();
   const L1=BP.LeftUpLeg.distanceTo(BP.LeftLeg), L2s=BP.LeftLeg.distanceTo(BP.LeftFoot), ANK=BP.LeftFoot.y;
@@ -2558,7 +2558,7 @@ let UNLOCK={}; try{ UNLOCK=JSON.parse(localStorage.getItem('inkline_unlocks')||'
 const saveUnlocks=()=>{ try{ localStorage.setItem('inkline_unlocks',JSON.stringify(UNLOCK)); }catch(e){} };
 let LEVEL='story'; try{ if(UNLOCK.afterHours&&localStorage.getItem('inkline_level')==='after') LEVEL='after'; }catch(e){}
 const AFTER=()=>LEVEL==='after';
-const BUILD=60;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
+const BUILD=61;   /* bump with sw.js CACHE: shown on the title + pause screens, and cache-busts the character file */
 { const bt=document.getElementById('buildtag'); if(bt) bt.textContent='BUILD '+BUILD; }
 const CHARS=[ {id:'blader',label:'BLADER',url:'characters/rollerblader.glb?v='+BUILD} ];   /* BLADER is the one skater; the old CROWN / PUNK / CLASSIC / ZERO picks are gone */
 let CHAR='blader';
@@ -3500,9 +3500,12 @@ function resolveFace(){
   const onRail=P.flipRail&&clock-P.lastGrindEnd<0.45, dir=dirFromInp(lastInp);
   const name=T[1]||GRABS[Math.floor(Math.random()*GRABS.length)];
   P.trick={kind:T[0],name:(onRail?'Rail ':'')+name,pts:T[2]+(onRail?60:0)+(P.qpAir?60:0),dur:T[3],t:0,sgn:dir==='left'?-1:1,flip:/flip|cork|twist/.test(T[0]),face:ks};
+  if(DIRFLIP[T[0]]) P.trick.dirYaw=lastInp.m>0.3?Math.atan2(lastInp.x,lastInp.z):P.facing;   // double flips tumble toward the stick too
   if(!onRail) P.flipRail=null;
   sfx.trick(); if(ks.length===2) blip(660,0.12,'square',0.07,990);
 }
+const DIRFLIP={flip:1,flip2:2,bflip:1,bflip2:2,side:1,side2:2};   // flips that tumble toward the stick direction (turns)
+const _dq=new THREE.Quaternion(), _dq2=new THREE.Quaternion(), _X1=new V3(1,0,0);
 function startFlip(inp,quick){
   const dir=dirFromInp(inp), mod=held('mod');
   let T=mod&&FLIPS2[dir]?FLIPS2[dir]:FLIPS[dir]; if(dir==='none') T=T[Math.floor(Math.random()*T.length)];
@@ -3510,6 +3513,9 @@ function startFlip(inp,quick){
   else P.vel.y=Math.max(P.vel.y,1.5);
   const onRail=P.flipRail&&clock-P.lastGrindEnd<0.45;
   P.trick={kind:T[0],name:onRail?'Rail '+T[1]:T[1],pts:T[2]+(onRail?60:0)+(P.qpAir?60:0),dur:T[3],t:0,sgn:dir==='left'?-1:1,flip:true};
+  /* directional flips: tumble toward where the stick points in the world (any angle), not just his own front/back/side */
+  if(DIRFLIP[T[0]]){ const base={flip:0,flip2:0,bflip:Math.PI,bflip2:Math.PI,side:P.trick.sgn*Math.PI/2,side2:P.trick.sgn*Math.PI/2}[T[0]];
+    P.trick.dirYaw=inp&&inp.m>0.3?Math.atan2(inp.x,inp.z):P.facing+base; }
   if(!onRail) P.flipRail=null;
   P.squash=0.25; sfx.trick(); blip(520,0.1,'triangle',0.08,880);
   for(let i=0;i<10;i++) emit(P.pos.clone().add(new V3(0,0.3,0)),rv(4).setY(-1),0xe8e1c7,0.35,0.15,0);
@@ -3657,7 +3663,7 @@ const BA={
     blunt:    { hp:[0.03,0.73,-0.12],fL:[-0.22,0.02,0], fR:[0.2,0.02,0], kO:[10,8],  up:[20,26,0], aL:[20,0,-56], aR:[-36,0,38],  eL:[-22], eR:[-40]} },
   // tricks (airborne): feet relative to the body
   trick:{
-    tuck:    { hp:[0,0.8,0.02],  fL:[-0.1,0.2,0.62], fR:[0.1,0.2,0.62], kO:[6,6], up:[52,0,0], hd:[10,0,0], aL:[-78,0,-8], aR:[-78,0,8], eL:[-112], eR:[-112]},   // knees to the chest, back rounded, arms wrapped round the shins
+    tuck:    { hp:[0,0.8,0.02],  fL:[-0.1,0.2,0.62], fR:[0.1,0.2,0.62], kO:[6,6], up:[52,0,0], hd:[10,0,0], aL:[-42,0,-14], aR:[-42,0,14], eL:[-64], eR:[-64]},   // knees to the chest, back rounded, arms wrapped round the shins
     spin:    { hp:[0,0.84,0], fL:[-0.12,0.04,0.2], fR:[0.12,0.04,0.2], kO:[8,8], up:[10,0,0], aL:[-24,0,-30], aR:[-24,0,30], eL:[-104], eR:[-104]},
     grab:    { hp:[0,0.8,0],  fL:[-0.14,0.16,0.38], fR:[0.12,0.08,0.32], kO:[14,10], up:[32,0,0], hd:[-20,0,0], aL:[-70,0,-6], aR:[-24,0,64], eL:[-16], eR:[-40]},
     kick:    { hp:[0,0.82,0], fL:[-0.1,0.62,0.4], fR:[0.12,-0.04,0.24], kO:[0,12], up:[6,0,0], aL:[-10,0,-82], aR:[-10,0,82], eL:[-14], eR:[-14]},
@@ -3749,7 +3755,7 @@ function animateBlader(dt,r,P,hs){
     if(onGround) _aq.copy(r.body.quaternion).multiply(leg.hip.quaternion).multiply(leg.knee.quaternion).invert();   // skate level with the ground
     else _aq.copy(leg.hip.quaternion).multiply(leg.knee.quaternion).invert();                                    // level with his own body
     const carve=onGround&&!P.grind?-clamp(P.turn,-1,1)*14:0;
-    leg.ankle.quaternion.copy(onGround||P.wall?_aq:_aq.slerp(_aq2.identity(),0.35)).multiply(_aq2.setFromEuler(_ae.set(0,0,carve*D2R))); }
+    leg.ankle.quaternion.copy(onGround||P.wall?_aq:_aq.slerp(_aq2.identity(),P.trick||P.knock>0?0.92:0.45)).multiply(_aq2.setFromEuler(_ae.set(0,0,carve*D2R))); }   // mid-trick the ankles relax: skates follow the shins instead of twisting out sideways
 }
 function updateSkater(dt){ P.inJump=held('jump'); P.inDrift=held('drift'); P.inBoost=held('boost'); updateSkaterFor(dt,SK,P,true); }
 // the full animator, for any rig + movement state (remote crew run through it too)
@@ -3860,7 +3866,9 @@ function updateSkaterFor(dt,SK,P,isLocal){
   r.body.rotation.x=P.trick?bx:lerp(r.body.rotation.x,bx,Math.min(1,dt*10));
   r.body.rotation.z=lerp(r.body.rotation.z,lean,dt*(P.wall?14:8));
   if(r.upper){ r.upper.rotation.x=lerp(r.upper.rotation.x,P.knock>0?0:leanX,Math.min(1,dt*10)); r.upper.rotation.y=lerp(r.upper.rotation.y,leanY,Math.min(1,dt*10)); }
-  if(P.trick&&(P.trick.kind==='side'||P.trick.kind==='side2')){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2); r.body.rotation.z=e*Math.PI*2*(P.trick.kind==='side2'?2:1)*P.trick.sgn; }
+  if(P.trick&&P.trick.dirYaw!==undefined&&DIRFLIP[P.trick.kind]){ const k=clamp(P.trick.t/P.trick.dur,0,1), e=1-Math.pow(1-k,2), a=angDiff(P.facing,P.trick.dirYaw);
+    _dq.setFromAxisAngle(_UP,a); _dq2.setFromAxisAngle(_X1,e*Math.PI*2*DIRFLIP[P.trick.kind]); r.body.quaternion.copy(_dq).multiply(_dq2).multiply(_dq.invert()); }
+  else if(P.trick&&(P.trick.kind==='side'||P.trick.kind==='side2')){ const k=P.trick.t/P.trick.dur, e=1-Math.pow(1-k,2); r.body.rotation.z=e*Math.PI*2*(P.trick.kind==='side2'?2:1)*P.trick.sgn; }
   if(P.trick&&(P.trick.flip||(r.crouchK&&/^(flip|bflip|cork|twist)/.test(P.trick.kind)))){ const k=P.trick.t/P.trick.dur, tuck=Math.sin(Math.min(1,k)*Math.PI); P.crouch=lerp(P.crouch,0.85,0.5*tuck); r.aL.rotation.x=-1.2*tuck; r.aR.rotation.x=-1.2*tuck; }
   r.root.visible=!(P.invuln>0&&Math.floor(performance.now()/90)%2===0);
   if(r.anim) animateBlader(dt,r,P,hs);   // BLADER: authored poses replace the procedural limb formulas
